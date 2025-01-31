@@ -2,6 +2,8 @@ from skyfield.api import load
 from skyfield.sgp4lib import EarthSatellite
 from skyfield.toposlib import wgs84
 from datetime import timedelta
+from pytz import timezone
+
 
 ts = load.timescale()
 t = ts.now()
@@ -20,8 +22,8 @@ t2, ev = sl.find_events(stp, t0, t1, altitude_degrees=30)
 
 for ti, event in zip(t2, ev):
     if event == 1:
-        tm = ti.utc_strftime('%Y %b %d %H:%M:%S')
+        tm = ti.astimezone(timezone('Europe/Moscow')).strftime('%Y_%b_%d %H:%M:%S')
         top = dif.at(ti)
         alt, az, dist = top.altaz()
 #        alt, az = alt.degrees, az.degrees
-        print(f'Время кульминации сеанса:{tm}\n\tУгол над горизонтом: {alt}\n\tАзимут: {az}')
+        print(f'Время кульминации (UTC+3): {tm}\n\tУгол над горизонтом: {alt}\n\tАзимут: \t\t\t{az}')
