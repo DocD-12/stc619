@@ -111,6 +111,6 @@ class Window(QtWidgets.QWidget):
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
     window = Window()
-    window.setGeometry(0, 0, 2560, 1080)
+    window.setGeometry(0, 0, 1920, 1080)
     window.show()
     sys.exit(app.exec())
