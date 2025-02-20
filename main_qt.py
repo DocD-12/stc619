@@ -1,13 +1,19 @@
 import sys
 from PyQt6 import QtCore, QtWidgets, QtGui
 
-
 class MainGraphicView(QtWidgets.QGraphicsView):
     def __init__(self):
         super().__init__()
+        self.SCALE_FACTOR = 1.25
         self.scene = QtWidgets.QGraphicsScene()
-        self.scene.addPixmap(QtGui.QPixmap("Worldmap_grid.png"))
+        self.img = QtWidgets.QGraphicsPixmapItem()
+        self.img.setPixmap(QtGui.QPixmap("Worldmap_grid.png"))
+        self.scene.addItem(self.img)
         self.setScene(self.scene)
+
+        self.setDragMode(QtWidgets.QGraphicsView.DragMode.ScrollHandDrag)
+        self.zoom_value = 0
+        self.resetView(self.SCALE_FACTOR ** float(self.zoom_value))
 
         self.x0 = 39
         self.x1 = 2520
@@ -24,7 +30,6 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 
         self.scene.installEventFilter(self)
         self.setMouseTracking(True)
-
 
     def eventFilter(self, source, event):
         if event.type() == QtCore.QEvent.Type.GraphicsSceneMouseRelease:
@@ -47,6 +52,42 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 
     def pixtoGeo(self, x, y):
         return x, y
+
+    def resetView(self, scale=1):
+        rect = QtCore.QRectF(self.img.pixmap().rect())
+        if not rect.isNull():
+            self.setSceneRect(rect)
+            if (scale := max(1, scale)) == 1:
+                self.zoom_value = 0
+            unity = self.transform().mapRect(QtCore.QRectF(0, 0, 1, 1))
+            self.scale(1 / unity.width(), 1 / unity.height())
+            viewrect = self.viewport().rect()
+            scenerect = self.transform().mapRect(rect)
+            factor = min(viewrect.width() / scenerect.width(),
+                         viewrect.height() / scenerect.height()) * scale
+            self.scale(factor, factor)
+            # self.updateCoordinates()
+
+    def zoom(self, step):
+        zoom = max(0, self.zoom_value + (step := int(step)))
+        if zoom != self.zoom_value:
+            self._zoom = zoom
+            if self._zoom > 0:
+                if step > 0:
+                    factor = self.SCALE_FACTOR ** step
+                else:
+                    factor = 1 / self.SCALE_FACTOR ** abs(step)
+                self.scale(factor, factor)
+            else:
+                self.resetView()
+
+    def wheelEvent(self, event):
+        delta = event.angleDelta().y()
+        self.zoom(delta and delta // abs(delta))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.resetView()
 
 
 class MainWindow(QtWidgets.QMainWindow):
