@@ -11,7 +11,7 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         self.scene.addItem(self.img)
         self.setScene(self.scene)
 
-        self.setDragMode(QtWidgets.QGraphicsView.DragMode.ScrollHandDrag)
+        # self.setDragMode(QtWidgets.QGraphicsView.DragMode.ScrollHandDrag)
         self.zoom_value = 0
         self.resetView(self.SCALE_FACTOR ** float(self.zoom_value))
 
@@ -19,11 +19,21 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         self.x1 = 2520
         self.y0 = 19
         self.y1 = 1263
+        self.ymid = (self.y1 - self.y0) / 2
+        self.xsq0 = 1200
+        self.xsq1 = 1408
+        self.pix_height = self.y1 - self.y0
+        self.ppgh = self.pix_height / 180
+        self.width = self.x1 - self.x0
+        self.ppgw = (self.xsq1 - self.xsq0) / 30
 
         self.pic_sat = QtWidgets.QGraphicsPixmapItem()
         self.pic_sat.setPixmap(QtGui.QPixmap('sat.png').scaled(50, 50))
         self.scene.addItem(self.pic_sat)
-
+        satx, saty = self.geotoPix(-71, 65)
+        satx -= 25
+        saty -= 25
+        self.pic_sat.setPos(satx, saty)
         self.pic_base = QtWidgets.QGraphicsPixmapItem()
         self.pic_base.setPixmap(QtGui.QPixmap('base.png').scaled(50, 50))
         self.scene.addItem(self.pic_base)
@@ -39,7 +49,7 @@ class MainGraphicView(QtWidgets.QGraphicsView):
                 map = item.mapFromScene(event.scenePos())
                 # print(f'mouse is on pixmap at coordinates {map.x()}, {map.y()}')
                 geocoo = self.pixtoGeo(map.x(), map.y())
-                print(f'mouse is on pixmap at coordinates {geocoo}')
+                # print(f'mouse is on pixmap at coordinates {geocoo}')
                 self.pic_base.setPos(map.x() - 25, map.y() - 25)
 
         return super().eventFilter(source, event)
@@ -48,9 +58,23 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         pass
 
     def geotoPix(self, lon, lat):
-        pass
+        y = lon * self.ppgh
+        y = self.ymid + self.y0 - y
+        x = lat * self.ppgw
+        x = self.xsq0 - x
+        return x, y
+
 
     def pixtoGeo(self, x, y):
+        print(f'pixmap at coordinates x:{x} y:{y}')
+
+        y = y - self.y0
+        pixy = 90 - (y / self.ppgh)
+        print(pixy)
+
+        pixx = - (x - self.xsq0) / self.ppgw
+        print(pixx)
+
         return x, y
 
     def resetView(self, scale=1):
