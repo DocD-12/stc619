@@ -12,7 +12,7 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         self.setScene(self.scene)
 
         # self.setDragMode(QtWidgets.QGraphicsView.DragMode.ScrollHandDrag)
-        self.zoom_value = 0
+        self.zoom_value = 1
         self.resetView(self.SCALE_FACTOR ** float(self.zoom_value))
 
         self.x0 = 39
@@ -30,7 +30,7 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         self.pic_sat = QtWidgets.QGraphicsPixmapItem()
         self.pic_sat.setPixmap(QtGui.QPixmap('sat.png').scaled(50, 50))
         self.scene.addItem(self.pic_sat)
-        satx, saty = self.geotoPix(-71, 65)
+        satx, saty = self.geotoPix(0, 0)
         satx -= 25
         saty -= 25
         self.pic_sat.setPos(satx, saty)
@@ -95,8 +95,8 @@ class MainGraphicView(QtWidgets.QGraphicsView):
     def zoom(self, step):
         zoom = max(0, self.zoom_value + (step := int(step)))
         if zoom != self.zoom_value:
-            self._zoom = zoom
-            if self._zoom > 0:
+            self.zoom_value = zoom
+            if self.zoom_value > 0:
                 if step > 0:
                     factor = self.SCALE_FACTOR ** step
                 else:
@@ -113,16 +113,33 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         super().resizeEvent(event)
         self.resetView()
 
+# class MainGraphicView(QtWidgets.QGraphicsView):
+#     def __init__(self):
+#         super().__init__()
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
-        w = QtWidgets.QWidget()
-        l = QtWidgets.QVBoxLayout()
-        l.addWidget(MainGraphicView())
-        w.setLayout(l)
+        self.g_viewer = MainGraphicView()
+        window_widget = QtWidgets.QWidget()
+        main_layout = QtWidgets.QHBoxLayout()
+        list_layout = QtWidgets.QVBoxLayout()
+        big_layout = QtWidgets.QVBoxLayout()
+        info_layout = QtWidgets.QHBoxLayout()
+        mgv_layout = QtWidgets.QHBoxLayout()
 
-        self.setCentralWidget(w)
+        info_layout.addWidget(QtWidgets.QLabel("ЦС"))
+        info_layout.addWidget(QtWidgets.QLabel("КА"))
+        mgv_layout.addWidget(self.g_viewer)
+        big_layout.addLayout(mgv_layout)
+        big_layout.addLayout(info_layout)
+
+        list_layout.addWidget(QtWidgets.QLabel("Список сеансов"))
+        main_layout.addLayout(big_layout)
+        main_layout.addLayout(list_layout)
+        window_widget.setLayout(main_layout)
+
+        self.setCentralWidget(window_widget)
 
 
 if __name__ == "__main__":
