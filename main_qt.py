@@ -1,5 +1,8 @@
 import sys
 from PyQt6 import QtCore, QtWidgets, QtGui
+from skyfield.api import load
+from skyfield.toposlib import wgs84
+
 
 class MainGraphicView(QtWidgets.QGraphicsView):
     def __init__(self):
@@ -13,7 +16,7 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 
         self.setDragMode(QtWidgets.QGraphicsView.DragMode.ScrollHandDrag)
         self.zoom_value = 0
-        self.resetView(self.SCALE_FACTOR ** float(self.zoom_value))
+        self.reset_view(self.SCALE_FACTOR ** float(self.zoom_value))
         self.setTransformationAnchor(
             QtWidgets.QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(
@@ -35,15 +38,13 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         self.width = self.x1 - self.x0
         self.ppgw = (self.xsq1 - self.xsq0) / 30
 
+        self.pic_size = 30
+        self.pic_size_2 = 30 // 2
         self.pic_sat = QtWidgets.QGraphicsPixmapItem()
-        self.pic_sat.setPixmap(QtGui.QPixmap('sat.png').scaled(50, 50))
+        self.pic_sat.setPixmap(QtGui.QPixmap('sat.png').scaled(self.pic_size, self.pic_size))
         self.scene.addItem(self.pic_sat)
-        satx, saty = self.geotoPix(0, 0)
-        satx -= 25
-        saty -= 25
-        self.pic_sat.setPos(satx, saty)
         self.pic_base = QtWidgets.QGraphicsPixmapItem()
-        self.pic_base.setPixmap(QtGui.QPixmap('base.png').scaled(50, 50))
+        self.pic_base.setPixmap(QtGui.QPixmap('base.png').scaled(self.pic_size, self.pic_size))
         self.scene.addItem(self.pic_base)
 
         self.scene.installEventFilter(self)
@@ -57,24 +58,28 @@ class MainGraphicView(QtWidgets.QGraphicsView):
                     # map the scene position to item coordinates
                     map = item.mapFromScene(event.scenePos())
                     # print(f'mouse is on pixmap at coordinates {map.x()}, {map.y()}')
-                    geocoo = self.pixtoGeo(map.x(), map.y())
+                    geocoo = self.pix_to_geo(map.x(), map.y())
                     # print(f'mouse is on pixmap at coordinates {geocoo}')
-                    self.pic_base.setPos(map.x() - 25, map.y() - 25)
+                    self.pic_base.setPos(map.x() - self.pic_size_2, map.y() - self.pic_size_2)
 
         return super().eventFilter(source, event)
 
-    def moveSatto(self, lon, lat):
-        pass
+    def move_sat_to(self, lon, lat):
+        satx, saty = self.geo_to_pix(lon, lat)
+        satx -= self.pic_size_2
+        saty -= self.pic_size_2
+        self.pic_sat.setPos(satx, saty)
 
-    def geotoPix(self, lon, lat):
+    def geo_to_pix(self, lon, lat):
         y = lon * self.ppgh
         y = self.ymid + self.y0 - y
         x = lat * self.ppgw
-        x = self.xsq0 - x
+        x = self.xsq0 + x
+        print(x, y)
         return x, y
 
 
-    def pixtoGeo(self, x, y):
+    def pix_to_geo(self, x, y):
         print(f'pixmap at coordinates x:{x} y:{y}')
 
         y = y - self.y0
@@ -86,7 +91,7 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 
         return x, y
 
-    def resetView(self, scale=1):
+    def reset_view(self, scale=1):
         rect = QtCore.QRectF(self.img.pixmap().rect())
         if not rect.isNull():
             self.setSceneRect(rect)
@@ -112,7 +117,7 @@ class MainGraphicView(QtWidgets.QGraphicsView):
                     factor = 1 / self.SCALE_FACTOR ** abs(step)
                 self.scale(factor, factor)
             else:
-                self.resetView()
+                self.reset_view()
 
     def wheelEvent(self, event):
         delta = event.angleDelta().y()
@@ -120,7 +125,8 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.resetView()
+        self.reset_view()
+
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
@@ -146,6 +152,25 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.setCentralWidget(window_widget)
 
+        coords = self.get_satellite_coordinates()
+        self.g_viewer.move_sat_to(coords[0], coords[1])
+
+
+    def get_satellite_coordinates(self, number=57191):
+        ts = load.timescale()
+        t = ts.now()
+
+        stations_url = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle'
+        satellites = load.tle_file(stations_url)
+        print('Loaded', len(satellites), 'satellites')
+        by_number = {sat.model.satnum: sat for sat in satellites}
+        satellite = by_number[number]
+        # by_name = {sat.name: sat for sat in satellites}
+        # satellite = by_name['POLYTECH-UNIVERSE 3 (R*)']
+
+        geocentric = satellite.at(t)
+        lat_satellite, lon_satellite = wgs84.latlon_of(geocentric)
+        return lat_satellite.degrees, lon_satellite.degrees
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
