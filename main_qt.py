@@ -11,9 +11,17 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         self.scene.addItem(self.img)
         self.setScene(self.scene)
 
-        # self.setDragMode(QtWidgets.QGraphicsView.DragMode.ScrollHandDrag)
-        self.zoom_value = 1
+        self.setDragMode(QtWidgets.QGraphicsView.DragMode.ScrollHandDrag)
+        self.zoom_value = 0
         self.resetView(self.SCALE_FACTOR ** float(self.zoom_value))
+        self.setTransformationAnchor(
+            QtWidgets.QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setResizeAnchor(
+            QtWidgets.QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setVerticalScrollBarPolicy(
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         self.x0 = 39
         self.x1 = 2520
@@ -42,15 +50,16 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         self.setMouseTracking(True)
 
     def eventFilter(self, source, event):
-        if event.type() == QtCore.QEvent.Type.GraphicsSceneMouseRelease:
-            item = self.scene.itemAt(event.scenePos(), QtGui.QTransform())
-            if isinstance(item, QtWidgets.QGraphicsPixmapItem):
-                # map the scene position to item coordinates
-                map = item.mapFromScene(event.scenePos())
-                # print(f'mouse is on pixmap at coordinates {map.x()}, {map.y()}')
-                geocoo = self.pixtoGeo(map.x(), map.y())
-                # print(f'mouse is on pixmap at coordinates {geocoo}')
-                self.pic_base.setPos(map.x() - 25, map.y() - 25)
+        if event.type() == QtCore.QEvent.Type.GraphicsSceneMousePress:
+            if event.button() == QtCore.Qt.MouseButton.RightButton:
+                item = self.scene.itemAt(event.scenePos(), QtGui.QTransform())
+                if isinstance(item, QtWidgets.QGraphicsPixmapItem):
+                    # map the scene position to item coordinates
+                    map = item.mapFromScene(event.scenePos())
+                    # print(f'mouse is on pixmap at coordinates {map.x()}, {map.y()}')
+                    geocoo = self.pixtoGeo(map.x(), map.y())
+                    # print(f'mouse is on pixmap at coordinates {geocoo}')
+                    self.pic_base.setPos(map.x() - 25, map.y() - 25)
 
         return super().eventFilter(source, event)
 
@@ -112,10 +121,6 @@ class MainGraphicView(QtWidgets.QGraphicsView):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.resetView()
-
-# class MainGraphicView(QtWidgets.QGraphicsView):
-#     def __init__(self):
-#         super().__init__()
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
