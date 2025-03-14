@@ -2,6 +2,7 @@ import sys
 from PyQt6 import QtCore, QtWidgets, QtGui
 from skyfield.api import load
 from skyfield.toposlib import wgs84
+from datetime import timedelta
 
 
 class MainGraphicView(QtWidgets.QGraphicsView):
@@ -46,9 +47,18 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         self.pic_base = QtWidgets.QGraphicsPixmapItem()
         self.pic_base.setPixmap(QtGui.QPixmap('base.png').scaled(self.pic_size, self.pic_size))
         self.scene.addItem(self.pic_base)
+        # self.scene.addEllipse(100, 100, 10, 10)
 
         self.scene.installEventFilter(self)
         self.setMouseTracking(True)
+
+    def draw_dot_by_geo(self, lat, lon, color=QtGui.QColor('black'), size=5):
+        pen = QtGui.QPen(color)
+        brush = QtGui.QBrush()
+        brush.setColor(color)
+        brush.setStyle(QtCore.Qt.BrushStyle.SolidPattern)
+        x, y = self.geo_to_pix(lat, lon)
+        self.scene.addEllipse(x, y, size, size, pen, brush)
 
     def eventFilter(self, source, event):
         if event.type() == QtCore.QEvent.Type.GraphicsSceneMousePress:
@@ -78,18 +88,12 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         print(x, y)
         return x, y
 
-
     def pix_to_geo(self, x, y):
-        print(f'pixmap at coordinates x:{x} y:{y}')
-
+        # print(f'pixmap at coordinates x:{x} y:{y}')
         y = y - self.y0
-        pixy = 90 - (y / self.ppgh)
-        print(pixy)
-
-        pixx = - (x - self.xsq0) / self.ppgw
-        print(pixx)
-
-        return x, y
+        lat = 90 - (y / self.ppgh)
+        lon = (x - self.xsq0) / self.ppgw
+        return lat, lon
 
     def reset_view(self, scale=1):
         rect = QtCore.QRectF(self.img.pixmap().rect())
@@ -127,6 +131,15 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         super().resizeEvent(event)
         self.reset_view()
 
+class com_center_widget(QtWidgets.QWidget):
+    def __init__(self):
+        super().__init__()
+        main_layout = QtWidgets.QVBoxLayout()
+        main_layout.addWidget(QtWidgets.QLabel("ЦС"))
+        main_layout.addWidget(QtWidgets.QLabel("LAT"))
+        main_layout.addWidget(QtWidgets.QLabel("LON"))
+        self.setLayout(main_layout)
+
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
@@ -139,7 +152,7 @@ class MainWindow(QtWidgets.QMainWindow):
         info_layout = QtWidgets.QHBoxLayout()
         mgv_layout = QtWidgets.QHBoxLayout()
 
-        info_layout.addWidget(QtWidgets.QLabel("ЦС"))
+        info_layout.addWidget(com_center_widget())
         info_layout.addWidget(QtWidgets.QLabel("КА"))
         mgv_layout.addWidget(self.g_viewer)
         big_layout.addLayout(mgv_layout)
@@ -152,8 +165,29 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.setCentralWidget(window_widget)
 
+        self.sat_show()
+
+
+    def sat_show(self):
         coords = self.get_satellite_coordinates()
         self.g_viewer.move_sat_to(coords[0], coords[1])
+        coords = self.get_satellite_path_coordinates()
+        r_sat = 255
+        g_sat = 0
+        b_sat = 0
+        step = 2
+        for i in coords:
+            if b_sat >= 255:
+                b_sat = 255
+                r_sat -= step
+                if r_sat <= 0:
+                    r_sat = 0
+                    g_sat += step
+                    if g_sat >= 255:
+                        g_sat = 255
+            else:
+                b_sat += step
+            self.g_viewer.draw_dot_by_geo(i[0], i[1],QtGui.QColor(r_sat, g_sat, b_sat))
 
 
     def get_satellite_coordinates(self, number=57191):
@@ -171,6 +205,25 @@ class MainWindow(QtWidgets.QMainWindow):
         geocentric = satellite.at(t)
         lat_satellite, lon_satellite = wgs84.latlon_of(geocentric)
         return lat_satellite.degrees, lon_satellite.degrees
+
+    def get_satellite_path_coordinates(self, number=57191):
+        ts = load.timescale()
+        t1 = ts.now()
+        # t1 = t + timedelta(minutes=5)
+        stations_url = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle'
+        satellites = load.tle_file(stations_url)
+        print('Loaded', len(satellites), 'satellites')
+        by_number = {sat.model.satnum: sat for sat in satellites}
+        satellite = by_number[number]
+        # by_name = {sat.name: sat for sat in satellites}
+        # satellite = by_name['POLYTECH-UNIVERSE 3 (R*)']
+        clist = []
+        for i in range(300):
+            t1 += timedelta(minutes=1)
+            geocentric = satellite.at(t1)
+            lat_satellite, lon_satellite = wgs84.latlon_of(geocentric)
+            clist.append([lat_satellite.degrees, lon_satellite.degrees])
+        return clist
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
