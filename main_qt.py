@@ -3,6 +3,7 @@ from PyQt6 import QtCore, QtWidgets, QtGui
 from skyfield.api import load
 from skyfield.toposlib import wgs84
 from datetime import timedelta
+from pytz import timezone
 
 
 class MainGraphicView(QtWidgets.QGraphicsView):
@@ -19,7 +20,7 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 
         self.setDragMode(QtWidgets.QGraphicsView.DragMode.ScrollHandDrag)
         self.zoom_value = 0
-        self.reset_view(self.SCALE_FACTOR ** self.zoom_value)
+        self.reset_view(int(self.SCALE_FACTOR ** self.zoom_value))
         self.setTransformationAnchor(
             QtWidgets.QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(
@@ -139,7 +140,8 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         super().resizeEvent(event)
         self.reset_view()
 
-class com_center_widget(QtWidgets.QWidget):
+
+class ComCenterWidget(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         main_layout = QtWidgets.QVBoxLayout()
@@ -150,12 +152,66 @@ class com_center_widget(QtWidgets.QWidget):
         main_layout.addWidget(self.lat_label)
         main_layout.addWidget(self.lon_label)
         self.setLayout(main_layout)
+        self.lat = None
+        self.lon = None
+
 
     def show_coords(self, lat, lon):
+        self.lat = lat
+        self.lon = lon
         self.lat_label.setText("LAT: " + f'{lat}')
         self.lon_label.setText("LON: " + f'{lon}')
 
-class spacecraft_widget(QtWidgets.QWidget):
+    def get_coords(self):
+        return self.lat, self.lon
+
+
+class ParametersWidget(QtWidgets.QWidget):
+    def __init__(self):
+        super().__init__()
+        main_layout = QtWidgets.QVBoxLayout()
+
+        title_label = QtWidgets.QLabel("Параметры сеанса связи")
+
+        time_layout = QtWidgets.QHBoxLayout()
+        self.time_line = QtWidgets.QLineEdit()
+        self.time_line.setInputMask("999")
+        self.time_line.setText("7")
+        self.time_label = QtWidgets.QLabel("Дни: ")
+        time_layout.addWidget(self.time_label)
+        time_layout.addWidget(self.time_line)
+
+        degree_layout = QtWidgets.QHBoxLayout()
+        self.degree_line = QtWidgets.QLineEdit()
+        self.degree_line.setInputMask("99")
+        self.degree_line.setText("30")
+        self.degree_label = QtWidgets.QLabel("Градусы: ")
+        degree_layout.addWidget(self.degree_label)
+        degree_layout.addWidget(self.degree_line)
+
+        self.start_button = QtWidgets.QPushButton("Рассчитать")
+
+        main_layout.addWidget(title_label)
+        main_layout.addLayout(time_layout)
+        main_layout.addLayout(degree_layout)
+        main_layout.addWidget(self.start_button)
+
+        self.setLayout(main_layout)
+
+
+class ListWidget(QtWidgets.QWidget):
+    def __init__(self):
+        super().__init__()
+        main_layout = QtWidgets.QVBoxLayout()
+        title_label = QtWidgets.QLabel("Список сеансов")
+        self.sessions_list = QtWidgets.QListWidget()
+        main_layout.addWidget(title_label)
+        main_layout.addWidget(self.sessions_list)
+        # self.sessions_list.addItem("ITEM")
+        self.setLayout(main_layout)
+
+
+class SpacecraftWidget(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         main_layout = QtWidgets.QVBoxLayout()
@@ -171,13 +227,17 @@ class spacecraft_widget(QtWidgets.QWidget):
         self.lat_label.setText("LAT: " + f'{lat}')
         self.lon_label.setText("LON: " + f'{lon}')
 
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.g_viewer = MainGraphicView()
         self.g_viewer.base_coords_out_signal.connect(self.base_coords_handler)
-        self.com_center_w = com_center_widget()
-        self.spacecraft_w = spacecraft_widget()
+        self.com_center_w = ComCenterWidget()
+        self.spacecraft_w = SpacecraftWidget()
+        self.parameters_w = ParametersWidget()
+        self.parameters_w.start_button.clicked.connect(self.start_button_clicked)
+        self.list_w = ListWidget()
         window_widget = QtWidgets.QWidget()
         main_layout = QtWidgets.QHBoxLayout()
         list_layout = QtWidgets.QVBoxLayout()
@@ -185,20 +245,51 @@ class MainWindow(QtWidgets.QMainWindow):
         info_layout = QtWidgets.QHBoxLayout()
         mgv_layout = QtWidgets.QHBoxLayout()
 
-        info_layout.addWidget(self.com_center_w)
-        info_layout.addWidget(self.spacecraft_w)
+        info_layout.addWidget(self.com_center_w, 1)
+        info_layout.addWidget(self.spacecraft_w, 1)
+        info_layout.addWidget(self.parameters_w, 1)
         mgv_layout.addWidget(self.g_viewer)
         big_layout.addLayout(mgv_layout)
         big_layout.addLayout(info_layout)
 
-        list_layout.addWidget(QtWidgets.QLabel("Список сеансов"))
-        main_layout.addLayout(big_layout)
-        main_layout.addLayout(list_layout)
+        list_layout.addWidget(self.list_w)
+        main_layout.addLayout(big_layout, 3)
+        main_layout.addLayout(list_layout, 1)
         window_widget.setLayout(main_layout)
 
         self.setCentralWidget(window_widget)
 
         self.sat_show()
+
+    @QtCore.pyqtSlot()
+    def start_button_clicked(self):
+        if self.com_center_w.lat == None:
+            dlg = QtWidgets.QDialog(self)
+            dlg.setWindowTitle("Расположите Центр Связи")
+            dlg.exec()
+        elif self.parameters_w.time_line.text() == '' \
+                or self.parameters_w.degree_line.text() == '':
+                dlg = QtWidgets.QDialog(self)
+                dlg.setWindowTitle("Дни и Градусы")
+                dlg.exec()
+        else:
+            td = int(self.parameters_w.time_line.text())
+            degrees = int(self.parameters_w.degree_line.text())
+            t0 = self.time
+            t1 = self.time + timedelta(days=td)
+            stp = wgs84.latlon(self.com_center_w.lat, self.com_center_w.lon)
+            dif = self.satellite - stp
+            t2, ev = self.satellite.find_events(stp, t0, t1, altitude_degrees=degrees)
+            for ti, event in zip(t2, ev):
+                if event == 1:
+                    tm = ti.astimezone(timezone('Europe/Moscow')).strftime('%Y_%b_%d %H:%M:%S')
+                    top = dif.at(ti)
+                    alt, az, dist = top.altaz()
+                    #        alt, az = alt.degrees, az.degrees
+                    str = f'Время (UTC+3): {tm}\n\tУгол высоты: {alt}\n\tАзимут:\t{az}'
+                    print(str)
+                    self.list_w.sessions_list.addItem(str)
+
 
     def base_coords_handler(self, lat, lon):
         self.com_center_w.show_coords(lat, lon)
@@ -224,13 +315,13 @@ class MainWindow(QtWidgets.QMainWindow):
                         g_sat = 255
             else:
                 b_sat += step
-            self.g_viewer.draw_dot_by_geo(i[0], i[1],QtGui.QColor(r_sat, g_sat, b_sat))
+            self.g_viewer.draw_dot_by_geo(i[0], i[1], QtGui.QColor(r_sat, g_sat, b_sat))
 
 
     def get_satellite_coordinates(self, number=57191):
         ts = load.timescale()
         t = ts.now()
-
+        self.time = t
         stations_url = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle'
         satellites = load.tle_file(stations_url)
         # print('Loaded', len(satellites), 'satellites')
@@ -238,7 +329,7 @@ class MainWindow(QtWidgets.QMainWindow):
         satellite = by_number[number]
         # by_name = {sat.name: sat for sat in satellites}
         # satellite = by_name['POLYTECH-UNIVERSE 3 (R*)']
-
+        self.satellite = satellite
         geocentric = satellite.at(t)
         lat_satellite, lon_satellite = wgs84.latlon_of(geocentric)
         return lat_satellite.degrees, lon_satellite.degrees
