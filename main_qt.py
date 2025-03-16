@@ -6,6 +6,8 @@ from datetime import timedelta
 
 
 class MainGraphicView(QtWidgets.QGraphicsView):
+    base_coords_out_signal = QtCore.pyqtSignal(float, float)
+
     def __init__(self):
         super().__init__()
         self.SCALE_FACTOR = 1.25
@@ -17,7 +19,7 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 
         self.setDragMode(QtWidgets.QGraphicsView.DragMode.ScrollHandDrag)
         self.zoom_value = 0
-        self.reset_view(self.SCALE_FACTOR ** float(self.zoom_value))
+        self.reset_view(self.SCALE_FACTOR ** self.zoom_value)
         self.setTransformationAnchor(
             QtWidgets.QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(
@@ -34,20 +36,21 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         self.ymid = (self.y1 - self.y0) / 2
         self.xsq0 = 1200
         self.xsq1 = 1408
+        self.x180 = 2446
         self.pix_height = self.y1 - self.y0
         self.ppgh = self.pix_height / 180
         self.width = self.x1 - self.x0
         self.ppgw = (self.xsq1 - self.xsq0) / 30
 
-        self.pic_size = 30
-        self.pic_size_2 = 30 // 2
+        self.pic_size = 60
+        self.pic_size_2 = self.pic_size // 2
         self.pic_sat = QtWidgets.QGraphicsPixmapItem()
         self.pic_sat.setPixmap(QtGui.QPixmap('sat.png').scaled(self.pic_size, self.pic_size))
+        # self.pic_sat.setPixmap(QtGui.QPixmap('sat.png').scaled(self.pic_size, self.pic_size, QtCore.Qt.AspectRatioMode.KeepAspectRatio, QtCore.Qt.TransformationMode.SmoothTransformation))
         self.scene.addItem(self.pic_sat)
         self.pic_base = QtWidgets.QGraphicsPixmapItem()
-        self.pic_base.setPixmap(QtGui.QPixmap('base.png').scaled(self.pic_size, self.pic_size))
+        self.pic_base.setPixmap(QtGui.QPixmap('base.png').scaled(self.pic_size, self.pic_size, ))
         self.scene.addItem(self.pic_base)
-        # self.scene.addEllipse(100, 100, 10, 10)
 
         self.scene.installEventFilter(self)
         self.setMouseTracking(True)
@@ -67,25 +70,30 @@ class MainGraphicView(QtWidgets.QGraphicsView):
                 if isinstance(item, QtWidgets.QGraphicsPixmapItem):
                     # map the scene position to item coordinates
                     map = item.mapFromScene(event.scenePos())
-                    # print(f'mouse is on pixmap at coordinates {map.x()}, {map.y()}')
+                    print(f'mouse is on pixmap at coordinates {map.x()}, {map.y()}')
                     geocoo = self.pix_to_geo(map.x(), map.y())
+                    self.base_coords_out_signal.emit(geocoo[0], geocoo[1])
                     # print(f'mouse is on pixmap at coordinates {geocoo}')
                     self.pic_base.setPos(map.x() - self.pic_size_2, map.y() - self.pic_size_2)
 
         return super().eventFilter(source, event)
 
-    def move_sat_to(self, lon, lat):
-        satx, saty = self.geo_to_pix(lon, lat)
+    def move_sat_to(self, lat, lon):
+        satx, saty = self.geo_to_pix(lat, lon)
         satx -= self.pic_size_2
         saty -= self.pic_size_2
         self.pic_sat.setPos(satx, saty)
 
-    def geo_to_pix(self, lon, lat):
-        y = lon * self.ppgh
+    def geo_to_pix(self, lat, lon):
+        y = lat * self.ppgh
         y = self.ymid + self.y0 - y
-        x = lat * self.ppgw
+        x = lon * self.ppgw
         x = self.xsq0 + x
-        print(x, y)
+        if x < self.x0:
+            # print(x, y)
+            # self.scene.addEllipse(x, y, 10, 10)
+            x = (180 + lon) * self.ppgw
+            x = self.x180 + x
         return x, y
 
     def pix_to_geo(self, x, y):
@@ -135,16 +143,41 @@ class com_center_widget(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         main_layout = QtWidgets.QVBoxLayout()
-        main_layout.addWidget(QtWidgets.QLabel("ЦС"))
-        main_layout.addWidget(QtWidgets.QLabel("LAT"))
-        main_layout.addWidget(QtWidgets.QLabel("LON"))
+        title_label = QtWidgets.QLabel("Центр Связи")
+        self.lat_label = QtWidgets.QLabel("LAT")
+        self.lon_label = QtWidgets.QLabel("LON")
+        main_layout.addWidget(title_label)
+        main_layout.addWidget(self.lat_label)
+        main_layout.addWidget(self.lon_label)
         self.setLayout(main_layout)
 
+    def show_coords(self, lat, lon):
+        self.lat_label.setText("LAT: " + f'{lat}')
+        self.lon_label.setText("LON: " + f'{lon}')
+
+class spacecraft_widget(QtWidgets.QWidget):
+    def __init__(self):
+        super().__init__()
+        main_layout = QtWidgets.QVBoxLayout()
+        title_label = QtWidgets.QLabel("Космический аппарат")
+        self.lat_label = QtWidgets.QLabel("LAT")
+        self.lon_label = QtWidgets.QLabel("LON")
+        main_layout.addWidget(title_label)
+        main_layout.addWidget(self.lat_label)
+        main_layout.addWidget(self.lon_label)
+        self.setLayout(main_layout)
+
+    def show_coords(self, lat, lon):
+        self.lat_label.setText("LAT: " + f'{lat}')
+        self.lon_label.setText("LON: " + f'{lon}')
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.g_viewer = MainGraphicView()
+        self.g_viewer.base_coords_out_signal.connect(self.base_coords_handler)
+        self.com_center_w = com_center_widget()
+        self.spacecraft_w = spacecraft_widget()
         window_widget = QtWidgets.QWidget()
         main_layout = QtWidgets.QHBoxLayout()
         list_layout = QtWidgets.QVBoxLayout()
@@ -152,8 +185,8 @@ class MainWindow(QtWidgets.QMainWindow):
         info_layout = QtWidgets.QHBoxLayout()
         mgv_layout = QtWidgets.QHBoxLayout()
 
-        info_layout.addWidget(com_center_widget())
-        info_layout.addWidget(QtWidgets.QLabel("КА"))
+        info_layout.addWidget(self.com_center_w)
+        info_layout.addWidget(self.spacecraft_w)
         mgv_layout.addWidget(self.g_viewer)
         big_layout.addLayout(mgv_layout)
         big_layout.addLayout(info_layout)
@@ -167,10 +200,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.sat_show()
 
+    def base_coords_handler(self, lat, lon):
+        self.com_center_w.show_coords(lat, lon)
+        # print(lat, lon)
 
     def sat_show(self):
         coords = self.get_satellite_coordinates()
         self.g_viewer.move_sat_to(coords[0], coords[1])
+        self.spacecraft_w.show_coords(coords[0], coords[1])
         coords = self.get_satellite_path_coordinates()
         r_sat = 255
         g_sat = 0
@@ -196,7 +233,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         stations_url = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle'
         satellites = load.tle_file(stations_url)
-        print('Loaded', len(satellites), 'satellites')
+        # print('Loaded', len(satellites), 'satellites')
         by_number = {sat.model.satnum: sat for sat in satellites}
         satellite = by_number[number]
         # by_name = {sat.name: sat for sat in satellites}
