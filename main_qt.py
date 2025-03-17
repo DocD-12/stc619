@@ -231,6 +231,9 @@ class SpacecraftWidget(QtWidgets.QWidget):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
+        self.setWindowTitle("Школа 619")
+        self.satellite = None
+        self.time = None
         self.g_viewer = MainGraphicView()
         self.g_viewer.base_coords_out_signal.connect(self.base_coords_handler)
         self.com_center_w = ComCenterWidget()
@@ -279,15 +282,28 @@ class MainWindow(QtWidgets.QMainWindow):
             t1 = self.time + timedelta(days=td)
             stp = wgs84.latlon(self.com_center_w.lat, self.com_center_w.lon)
             dif = self.satellite - stp
-            t2, ev = self.satellite.find_events(stp, t0, t1, altitude_degrees=degrees)
-            for ti, event in zip(t2, ev):
+            te, ev = self.satellite.find_events(stp, t0, t1, altitude_degrees=degrees)
+            start_t, finish_t, top = None, None, None
+            for ti, event in zip(te, ev):
+                if event == 0:
+                    start_t = ti.astimezone(timezone('Europe/Moscow'))
+                    start_t_str = start_t.strftime('%H:%M:%S')
                 if event == 1:
-                    tm = ti.astimezone(timezone('Europe/Moscow')).strftime('%Y_%b_%d %H:%M:%S')
+                    peak_t = ti.astimezone(timezone('Europe/Moscow')).strftime('%Y %b %d %H:%M:%S')
                     top = dif.at(ti)
+                if event == 2:
+                    finish_t = ti.astimezone(timezone('Europe/Moscow'))
+                    finish_t_str = finish_t.strftime('%H:%M:%S')
                     alt, az, dist = top.altaz()
+                    dif_t_str = (finish_t - start_t)
                     #        alt, az = alt.degrees, az.degrees
-                    str = f'Время (UTC+3): {tm}\n\tУгол высоты: {alt}\n\tАзимут:\t{az}'
-                    print(str)
+                    str = (f'Время (UTC+3): {peak_t}\n'
+                           f'\tАзимут:\t{az}\n'
+                           f'\tВысота:\t{alt}\n'                           
+                           f'\tНачало:\t{start_t_str}\n'
+                           f'\tКонец:\t{finish_t_str}\n'
+                           f'\tДлит.:\t{dif_t_str}')
+                    # print(str)
                     self.list_w.sessions_list.addItem(str)
 
 
@@ -322,8 +338,8 @@ class MainWindow(QtWidgets.QMainWindow):
         ts = load.timescale()
         t = ts.now()
         self.time = t
-        stations_url = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle'
-        satellites = load.tle_file(stations_url)
+        satellites_url = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle'
+        satellites = load.tle_file(satellites_url)
         # print('Loaded', len(satellites), 'satellites')
         by_number = {sat.model.satnum: sat for sat in satellites}
         satellite = by_number[number]
@@ -356,6 +372,5 @@ class MainWindow(QtWidgets.QMainWindow):
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     window = MainWindow()
-    window.show()
-
+    window.showMaximized()
     app.exec()
