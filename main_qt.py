@@ -79,6 +79,9 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 
         return super().eventFilter(source, event)
 
+    def move_base_to(self, lat, lon):
+        self.pic_base.setPos(lat - self.pic_size_2, lon - self.pic_size_2)
+
     def move_sat_to(self, lat, lon):
         satx, saty = self.geo_to_pix(lat, lon)
         satx -= self.pic_size_2
@@ -144,23 +147,33 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 class ComCenterWidget(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
+        self.lat = ''
+        self.lon = ''
         main_layout = QtWidgets.QVBoxLayout()
+        lat_layout = QtWidgets.QHBoxLayout()
+        lon_layout = QtWidgets.QHBoxLayout()
         title_label = QtWidgets.QLabel("Центр Связи")
-        self.lat_label = QtWidgets.QLabel("LAT")
-        self.lon_label = QtWidgets.QLabel("LON")
+        self.lat_label = QtWidgets.QLabel("LAT: ")
+        self.lat_line_edit = QtWidgets.QLineEdit(self.lat)
+        self.lon_label = QtWidgets.QLabel("LON: ")
+        self.lon_line_edit = QtWidgets.QLineEdit(self.lon)
+
         main_layout.addWidget(title_label)
-        main_layout.addWidget(self.lat_label)
-        main_layout.addWidget(self.lon_label)
+        main_layout.addLayout(lat_layout)
+        main_layout.addLayout(lon_layout)
+        lat_layout.addWidget(self.lat_label)
+        lat_layout.addWidget(self.lat_line_edit)
+        lon_layout.addWidget(self.lon_label)
+        lon_layout.addWidget(self.lon_line_edit)
+
         self.setLayout(main_layout)
-        self.lat = None
-        self.lon = None
 
 
     def show_coords(self, lat, lon):
         self.lat = lat
         self.lon = lon
-        self.lat_label.setText("LAT: " + f'{lat}')
-        self.lon_label.setText("LON: " + f'{lon}')
+        self.lat_line_edit.setText(f'{lat}')
+        self.lon_line_edit.setText(f'{lon}')
 
     def get_coords(self):
         return self.lat, self.lon
@@ -216,8 +229,8 @@ class SpacecraftWidget(QtWidgets.QWidget):
         super().__init__()
         main_layout = QtWidgets.QVBoxLayout()
         title_label = QtWidgets.QLabel("Космический аппарат")
-        self.lat_label = QtWidgets.QLabel("LAT")
-        self.lon_label = QtWidgets.QLabel("LON")
+        self.lat_label = QtWidgets.QLabel("LAT: ")
+        self.lon_label = QtWidgets.QLabel("LON: ")
         main_layout.addWidget(title_label)
         main_layout.addWidget(self.lat_label)
         main_layout.addWidget(self.lon_label)
@@ -240,6 +253,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.spacecraft_w = SpacecraftWidget()
         self.parameters_w = ParametersWidget()
         self.parameters_w.start_button.clicked.connect(self.start_button_clicked)
+        self.com_center_w.lat_line_edit.editingFinished.connect(self.base_show)
+        self.com_center_w.lon_line_edit.editingFinished.connect(self.base_show)
         self.list_w = ListWidget()
         window_widget = QtWidgets.QWidget()
         main_layout = QtWidgets.QHBoxLayout()
@@ -311,10 +326,24 @@ class MainWindow(QtWidgets.QMainWindow):
         self.com_center_w.show_coords(lat, lon)
         # print(lat, lon)
 
+    def base_show(self):
+        if self.com_center_w.lat_line_edit.text() == '':
+            lat = 0
+        else:
+            lat = float(self.com_center_w.lat_line_edit.text())
+        if self.com_center_w.lon_line_edit.text() == '':
+            lon = 0
+        else:
+            lon = float(self.com_center_w.lon_line_edit.text())
+        pix_lat, pix_lon = self.g_viewer.geo_to_pix(lat, lon)
+        print(pix_lat, pix_lon)
+        self.g_viewer.move_base_to(pix_lat, pix_lon)
+
+
     def sat_show(self):
         coords = self.get_satellite_coordinates()
-        self.g_viewer.move_sat_to(coords[0], coords[1])
         self.spacecraft_w.show_coords(coords[0], coords[1])
+        self.g_viewer.move_sat_to(coords[0], coords[1])
         coords = self.get_satellite_path_coordinates()
         r_sat = 255
         g_sat = 0
