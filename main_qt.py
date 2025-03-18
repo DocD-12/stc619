@@ -331,6 +331,8 @@ class MainWindow(QtWidgets.QMainWindow):
                         g_sat = 255
             else:
                 b_sat += step
+                if b_sat >= 255:
+                    b_sat = 255
             self.g_viewer.draw_dot_by_geo(i[0], i[1], QtGui.QColor(r_sat, g_sat, b_sat))
 
 
