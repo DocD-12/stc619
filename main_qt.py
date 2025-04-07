@@ -74,7 +74,7 @@ class MainGraphicView(QtWidgets.QGraphicsView):
                 if isinstance(item, QtWidgets.QGraphicsPixmapItem):
                     # map the scene position to item coordinates
                     map = item.mapFromScene(event.scenePos())
-                    print(f'mouse is on pixmap at coordinates {map.x()}, {map.y()}')
+                    # print(f'mouse is on pixmap at coordinates {map.x()}, {map.y()}')
                     geocoo = self.pix_to_geo(map.x(), map.y())
                     self.base_coords_out_signal.emit(geocoo[0], geocoo[1])
                     # print(f'mouse is on pixmap at coordinates {geocoo}')
@@ -153,7 +153,7 @@ class ComCenterWidget(QtWidgets.QWidget):
         self.lat = ''
         self.lon = ''
         main_layout = QtWidgets.QVBoxLayout()
-        title_label = QtWidgets.QLabel("Центр Связи")
+        title_label = QtWidgets.QLabel("Наземный Пункт Управления")
 
         lat_layout = QtWidgets.QHBoxLayout()
         self.lat_label = QtWidgets.QLabel("LAT: ")
@@ -223,7 +223,7 @@ class ParametersWidget(QtWidgets.QWidget):
         self.degree_line = QtWidgets.QLineEdit()
         self.degree_line.setInputMask("99")
         self.degree_line.setText("30")
-        self.degree_label = QtWidgets.QLabel("Градусы: ")
+        self.degree_label = QtWidgets.QLabel("Минимальный угол места, град: ")
         degree_layout.addWidget(self.degree_label)
         degree_layout.addWidget(self.degree_line)
 
@@ -327,7 +327,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def start_button_clicked(self):
         if self.com_center_w.lat == None:
             dlg = QtWidgets.QDialog(self)
-            dlg.setWindowTitle("Расположите Центр Связи")
+            dlg.setWindowTitle("Расположите Наземеного Пункта Связи")
             dlg.exec()
         elif self.parameters_w.time_line.text() == '' \
                 or self.parameters_w.degree_line.text() == '':
@@ -358,7 +358,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     #        alt, az = alt.degrees, az.degrees
                     str = (f'Время (UTC+3): {peak_t}\n'
                            f'\tАзимут:\t{az}\n'
-                           f'\tВысота:\t{alt}\n'                           
+                           f'\tМаксимальный угол места:\t{alt}\n'                           
                            f'\tНачало:\t{start_t_str}\n'
                            f'\tКонец:\t{finish_t_str}\n'
                            f'\tДлит.:\t{dif_t_str}')
