@@ -1,12 +1,9 @@
 import sys
-
 from PyQt6 import QtCore, QtWidgets, QtGui
-from PyQt6.QtGui import QDoubleValidator
 from skyfield.api import load
 from skyfield.toposlib import wgs84
 from datetime import timedelta
 from pytz import timezone
-from skyfield.units import Angle
 
 
 class MainGraphicView(QtWidgets.QGraphicsView):
@@ -153,41 +150,21 @@ class ComCenterWidget(QtWidgets.QWidget):
         self.lat = ''
         self.lon = ''
         main_layout = QtWidgets.QVBoxLayout()
-        title_label = QtWidgets.QLabel("Центр Связи")
-
         lat_layout = QtWidgets.QHBoxLayout()
-        self.lat_label = QtWidgets.QLabel("LAT: ")
-        self.lat_title_hms_label = QtWidgets.QLabel("HMS: ")
-        self.lat_line_edit = QtWidgets.QLineEdit(self.lat)
-        lat_validator = QDoubleValidator(-90, 90, 15)
-        lat_validator.setNotation(QDoubleValidator.Notation.StandardNotation)
-        lat_validator.setLocale(QtCore.QLocale("en_US"))
-        self.lat_line_edit.setValidator(lat_validator)
-        self.lat_hms_label = QtWidgets.QLabel(f"{self.lat}")
-
         lon_layout = QtWidgets.QHBoxLayout()
+        title_label = QtWidgets.QLabel("Центр Связи")
+        self.lat_label = QtWidgets.QLabel("LAT: ")
+        self.lat_line_edit = QtWidgets.QLineEdit(self.lat)
         self.lon_label = QtWidgets.QLabel("LON: ")
-        self.lon_title_hms_label = QtWidgets.QLabel("HMS: ")
         self.lon_line_edit = QtWidgets.QLineEdit(self.lon)
-        lon_validator = QDoubleValidator(-180, 180, 15)
-        lon_validator.setNotation(QDoubleValidator.Notation.StandardNotation)
-        lon_validator.setLocale(QtCore.QLocale("en_US"))
-        self.lon_line_edit.setValidator(lon_validator)
-        self.lon_hms_label = QtWidgets.QLabel(f"{self.lon}")
 
         main_layout.addWidget(title_label)
-
         main_layout.addLayout(lat_layout)
+        main_layout.addLayout(lon_layout)
         lat_layout.addWidget(self.lat_label)
         lat_layout.addWidget(self.lat_line_edit)
-        lat_layout.addWidget(self.lat_title_hms_label)
-        lat_layout.addWidget(self.lat_hms_label)
-
-        main_layout.addLayout(lon_layout)
         lon_layout.addWidget(self.lon_label)
         lon_layout.addWidget(self.lon_line_edit)
-        lon_layout.addWidget(self.lon_title_hms_label)
-        lon_layout.addWidget(self.lon_hms_label)
 
         self.setLayout(main_layout)
 
@@ -196,9 +173,7 @@ class ComCenterWidget(QtWidgets.QWidget):
         self.lat = lat
         self.lon = lon
         self.lat_line_edit.setText(f'{lat}')
-        self.lat_hms_label.setText(f'{Angle(degrees= lat)}')
         self.lon_line_edit.setText(f'{lon}')
-        self.lon_hms_label.setText(f'{Angle(degrees= lon)}')
 
     def get_coords(self):
         return self.lat, self.lon
@@ -254,35 +229,16 @@ class SpacecraftWidget(QtWidgets.QWidget):
         super().__init__()
         main_layout = QtWidgets.QVBoxLayout()
         title_label = QtWidgets.QLabel("Космический аппарат")
-
-        lat_layout = QtWidgets.QHBoxLayout()
-        lat_deg_label = QtWidgets.QHBoxLayout()
-        lat_hms_label = QtWidgets.QHBoxLayout()
-        self.lat_deg_label = QtWidgets.QLabel("LAT: ")
-        self.lat_hms_label = QtWidgets.QLabel("HMS: ")
-
-        lon_layout = QtWidgets.QHBoxLayout()
-        self.lon_deg_label = QtWidgets.QLabel("LON: ")
-        self.lon_hms_label = QtWidgets.QLabel("HMS: ")
-
-
+        self.lat_label = QtWidgets.QLabel("LAT: ")
+        self.lon_label = QtWidgets.QLabel("LON: ")
         main_layout.addWidget(title_label)
-
-        main_layout.addLayout(lat_layout)
-        lat_layout.addWidget(self.lat_deg_label)
-        lat_layout.addWidget(self.lat_hms_label)
-
-        main_layout.addLayout(lon_layout)
-        lon_layout.addWidget(self.lon_deg_label)
-        lon_layout.addWidget(self.lon_hms_label)
+        main_layout.addWidget(self.lat_label)
+        main_layout.addWidget(self.lon_label)
         self.setLayout(main_layout)
 
     def show_coords(self, lat, lon):
-        self.lat_deg_label.setText("LAT: " + f'{lat}')
-        self.lat_hms_label.setText("HMS: " + f'{Angle(degrees= lat)}')
-        self.lon_deg_label.setText("LON: " + f'{lon}')
-        self.lon_hms_label.setText("HMS: " + f'{Angle(degrees= lon)}')
-
+        self.lat_label.setText("LAT: " + f'{lat}')
+        self.lon_label.setText("LON: " + f'{lon}')
 
 
 class MainWindow(QtWidgets.QMainWindow):
