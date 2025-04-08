@@ -66,13 +66,20 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         self.scene.installEventFilter(self)
         self.setMouseTracking(True)
 
+        self.list_dots = []
+
     def draw_dot_by_geo(self, lat, lon, color=QtGui.QColor('black'), size=5):
         pen = QtGui.QPen(color)
         brush = QtGui.QBrush()
         brush.setColor(color)
         brush.setStyle(QtCore.Qt.BrushStyle.SolidPattern)
         x, y = self.geo_to_pix(lat, lon)
-        self.scene.addEllipse(x, y, size, size, pen, brush)
+        self.list_dots.append(self.scene.addEllipse(x, y, size, size, pen, brush))
+
+    def clear_dots(self):
+        for i in self.list_dots:
+            self.scene.removeItem(i)
+        self.list_dots = []
 
     def eventFilter(self, source, event):
         if event.type() == QtCore.QEvent.Type.GraphicsSceneMousePress:
@@ -404,6 +411,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 main_layout.addWidget(label_error)
             dlg.setLayout(main_layout)
             dlg.exec()
+
     def clear_button_clicked(self):
         self.list_w.sessions_list.clear()
 
@@ -431,6 +439,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.spacecraft_w.show_coords(coords[0], coords[1])
         self.g_viewer.move_sat_to(coords[0], coords[1])
         coords = self.get_satellite_path_coordinates(satellite_id)
+        self.g_viewer.clear_dots()
         r_sat = 255
         g_sat = 0
         b_sat = 0
