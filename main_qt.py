@@ -1,5 +1,6 @@
 import sys
 
+from PyQt6.QtGui import QIntValidator
 from PyQt6 import QtCore, QtWidgets, QtGui
 from PyQt6.QtGui import QDoubleValidator
 from skyfield.api import load
@@ -8,6 +9,12 @@ from datetime import timedelta
 from pytz import timezone
 from skyfield.units import Angle
 
+def isfloat(s):
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
 
 class MainGraphicView(QtWidgets.QGraphicsView):
     base_coords_out_signal = QtCore.pyqtSignal(float, float)
@@ -150,55 +157,57 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 class ComCenterWidget(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
-        self.lat = ''
-        self.lon = ''
+        self.lat = 59.93860
+        lat_dms = Angle(degrees=float(self.lat))
+        self.lon = 30.31410
+        lon_dms = Angle(degrees= float(self.lon))
+
         main_layout = QtWidgets.QVBoxLayout()
         title_label = QtWidgets.QLabel("Наземный Пункт Управления")
-
         lat_layout = QtWidgets.QHBoxLayout()
-        self.lat_label = QtWidgets.QLabel("LAT: ")
-        self.lat_title_hms_label = QtWidgets.QLabel("HMS: ")
-        self.lat_line_edit = QtWidgets.QLineEdit(self.lat)
-        lat_validator = QDoubleValidator(-90, 90, 15)
+        lat_deg_layout = QtWidgets.QHBoxLayout()
+        lat_label = QtWidgets.QLabel("LAT: ")
+        self.lat_line = QtWidgets.QLineEdit(f"{self.lat}")
+        self.lat_deg_label = QtWidgets.QLabel(f"DEG: {lat_dms}")
+        lon_layout = QtWidgets.QHBoxLayout()
+        lon_deg_layout = QtWidgets.QHBoxLayout()
+        lon_label = QtWidgets.QLabel("LON: ")
+        self.lon_line = QtWidgets.QLineEdit(f"{self.lon}")
+        self.lon_deg_label = QtWidgets.QLabel(f"DEG: {lon_dms}")
+
+        lat_validator = QDoubleValidator(-90, 90, 5)
         lat_validator.setNotation(QDoubleValidator.Notation.StandardNotation)
         lat_validator.setLocale(QtCore.QLocale("en_US"))
-        self.lat_line_edit.setValidator(lat_validator)
-        self.lat_hms_label = QtWidgets.QLabel(f"{self.lat}")
-
-        lon_layout = QtWidgets.QHBoxLayout()
-        self.lon_label = QtWidgets.QLabel("LON: ")
-        self.lon_title_hms_label = QtWidgets.QLabel("HMS: ")
-        self.lon_line_edit = QtWidgets.QLineEdit(self.lon)
-        lon_validator = QDoubleValidator(-180, 180, 15)
+        self.lat_line.setValidator(lat_validator)
+        lon_validator = QDoubleValidator(-180, 180, 5)
         lon_validator.setNotation(QDoubleValidator.Notation.StandardNotation)
         lon_validator.setLocale(QtCore.QLocale("en_US"))
-        self.lon_line_edit.setValidator(lon_validator)
-        self.lon_hms_label = QtWidgets.QLabel(f"{self.lon}")
+        self.lon_line.setValidator(lon_validator)
 
         main_layout.addWidget(title_label)
-
         main_layout.addLayout(lat_layout)
-        lat_layout.addWidget(self.lat_label)
-        lat_layout.addWidget(self.lat_line_edit)
-        lat_layout.addWidget(self.lat_title_hms_label)
-        lat_layout.addWidget(self.lat_hms_label)
-
+        main_layout.addLayout(lat_deg_layout)
+        lat_layout.addWidget(lat_label)
+        lat_layout.addWidget(self.lat_line)
+        lat_deg_layout.addWidget(self.lat_deg_label)
         main_layout.addLayout(lon_layout)
-        lon_layout.addWidget(self.lon_label)
-        lon_layout.addWidget(self.lon_line_edit)
-        lon_layout.addWidget(self.lon_title_hms_label)
-        lon_layout.addWidget(self.lon_hms_label)
+        main_layout.addLayout(lon_deg_layout)
+        lon_layout.addWidget(lon_label)
+        lon_layout.addWidget(self.lon_line)
+        lon_deg_layout.addWidget(self.lon_deg_label)
 
         self.setLayout(main_layout)
 
-
     def show_coords(self, lat, lon):
         self.lat = lat
+        lat_deg = str(Angle(degrees=float(self.lat)))
         self.lon = lon
-        self.lat_line_edit.setText(f'{lat}')
-        self.lat_hms_label.setText(f'{Angle(degrees= lat)}')
-        self.lon_line_edit.setText(f'{lon}')
-        self.lon_hms_label.setText(f'{Angle(degrees= lon)}')
+        lon_deg = str(Angle(degrees= float(self.lon)))
+        self.lat_line.setText(f'{lat:.5f}')
+        self.lat_deg_label.setText(f"DEG: {lat_deg}")
+        self.lon_line.setText(f'{lon:.5f}')
+        self.lon_deg_label.setText(f"DEG: {lon_deg}")
+
 
     def get_coords(self):
         return self.lat, self.lon
@@ -208,31 +217,39 @@ class ParametersWidget(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         main_layout = QtWidgets.QVBoxLayout()
+        button_layaot = QtWidgets.QHBoxLayout()
 
         title_label = QtWidgets.QLabel("Параметры сеанса связи")
 
         time_layout = QtWidgets.QHBoxLayout()
         self.time_line = QtWidgets.QLineEdit()
-        self.time_line.setInputMask("999")
+        time_line_validator = QIntValidator(0, 999)
         self.time_line.setText("7")
+        self.time_line.setValidator(time_line_validator)
         self.time_label = QtWidgets.QLabel("Дни: ")
         time_layout.addWidget(self.time_label)
         time_layout.addWidget(self.time_line)
 
         degree_layout = QtWidgets.QHBoxLayout()
+        degree_line_validator = QDoubleValidator(0, 90, 2)
+        degree_line_validator.setNotation(QDoubleValidator.Notation.StandardNotation)
+        degree_line_validator.setLocale(QtCore.QLocale("en_US"))
         self.degree_line = QtWidgets.QLineEdit()
-        self.degree_line.setInputMask("99")
         self.degree_line.setText("30")
+        self.degree_line.setValidator(degree_line_validator)
         self.degree_label = QtWidgets.QLabel("Минимальный угол места, град: ")
         degree_layout.addWidget(self.degree_label)
         degree_layout.addWidget(self.degree_line)
 
         self.start_button = QtWidgets.QPushButton("Рассчитать")
+        self.clear_button = QtWidgets.QPushButton("Очистить")
 
         main_layout.addWidget(title_label)
         main_layout.addLayout(time_layout)
         main_layout.addLayout(degree_layout)
-        main_layout.addWidget(self.start_button)
+        main_layout.addLayout(button_layaot)
+        button_layaot.addWidget(self.start_button)
+        button_layaot.addWidget(self.clear_button)
 
         self.setLayout(main_layout)
 
@@ -253,35 +270,43 @@ class SpacecraftWidget(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         main_layout = QtWidgets.QVBoxLayout()
+        title_layout = QtWidgets.QHBoxLayout()
         title_label = QtWidgets.QLabel("Космический аппарат")
 
-        lat_layout = QtWidgets.QHBoxLayout()
-        lat_deg_label = QtWidgets.QHBoxLayout()
-        lat_hms_label = QtWidgets.QHBoxLayout()
-        self.lat_deg_label = QtWidgets.QLabel("LAT: ")
-        self.lat_hms_label = QtWidgets.QLabel("HMS: ")
+        with open('gp.php') as gp:
+            lines = gp.readlines()
+            self.satellites = []
+            self.satellites_id = []
+            for i in range(0, len(lines), 3):
+                self.satellites.append(lines[i].strip('\n'))
+                self.satellites_id.append(lines[i+2].split(' ')[1])
+        self.satellites_box = QtWidgets.QComboBox()
+        self.satellites_box.addItems(self.satellites)
+        self.satellites_box.setCurrentText('POLYTECH-UNIVERSE 3 (R*)')
 
-        lon_layout = QtWidgets.QHBoxLayout()
-        self.lon_deg_label = QtWidgets.QLabel("LON: ")
-        self.lon_hms_label = QtWidgets.QLabel("HMS: ")
+        self.lat_label = QtWidgets.QLabel("LAT: ")
+        self.lat_deg_label = QtWidgets.QLabel("DEG: ")
+        self.lon_label = QtWidgets.QLabel("LON: ")
+        self.lon_deg_label = QtWidgets.QLabel("DEG: ")
 
-
-        main_layout.addWidget(title_label)
-
-        main_layout.addLayout(lat_layout)
-        lat_layout.addWidget(self.lat_deg_label)
-        lat_layout.addWidget(self.lat_hms_label)
-
-        main_layout.addLayout(lon_layout)
-        lon_layout.addWidget(self.lon_deg_label)
-        lon_layout.addWidget(self.lon_hms_label)
+        main_layout.addLayout(title_layout)
+        title_layout.addWidget(title_label)
+        title_layout.addWidget(self.satellites_box)
+        main_layout.addWidget(self.lat_label)
+        main_layout.addWidget(self.lat_deg_label)
+        main_layout.addWidget(self.lon_label)
+        main_layout.addWidget(self.lon_deg_label)
         self.setLayout(main_layout)
 
     def show_coords(self, lat, lon):
-        self.lat_deg_label.setText("LAT: " + f'{lat}')
-        self.lat_hms_label.setText("HMS: " + f'{Angle(degrees= lat)}')
-        self.lon_deg_label.setText("LON: " + f'{lon}')
-        self.lon_hms_label.setText("HMS: " + f'{Angle(degrees= lon)}')
+        self.lat_label.setText("LAT: " + f'{lat}')
+        self.lat_deg_label.setText("HMS: " + f'{Angle(degrees= lat)}')
+        self.lon_label.setText("LON: " + f'{lon}')
+        self.lon_deg_label.setText("HMS: " + f'{Angle(degrees= lon)}')
+
+    # def download_gph(self):
+    #     satellites_url = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle'
+    #     satellites = load.tle_file(satellites_url)
 
 
 
@@ -296,9 +321,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.com_center_w = ComCenterWidget()
         self.spacecraft_w = SpacecraftWidget()
         self.parameters_w = ParametersWidget()
+        self.spacecraft_w.satellites_box.currentTextChanged.connect(self.sat_show)
         self.parameters_w.start_button.clicked.connect(self.start_button_clicked)
-        self.com_center_w.lat_line_edit.editingFinished.connect(self.base_show)
-        self.com_center_w.lon_line_edit.editingFinished.connect(self.base_show)
+        self.parameters_w.clear_button.clicked.connect(self.clear_button_clicked)
+        self.com_center_w.lat_line.editingFinished.connect(self.base_show)
+        self.com_center_w.lon_line.editingFinished.connect(self.base_show)
         self.list_w = ListWidget()
         window_widget = QtWidgets.QWidget()
         main_layout = QtWidgets.QHBoxLayout()
@@ -320,23 +347,25 @@ class MainWindow(QtWidgets.QMainWindow):
         window_widget.setLayout(main_layout)
 
         self.setCentralWidget(window_widget)
-
+        self.base_show()
         self.sat_show()
 
     @QtCore.pyqtSlot()
     def start_button_clicked(self):
-        if self.com_center_w.lat == None:
-            dlg = QtWidgets.QDialog(self)
-            dlg.setWindowTitle("Расположите Наземеного Пункта Связи")
-            dlg.exec()
-        elif self.parameters_w.time_line.text() == '' \
-                or self.parameters_w.degree_line.text() == '':
-                dlg = QtWidgets.QDialog(self)
-                dlg.setWindowTitle("Дни и Градусы")
-                dlg.exec()
-        else:
+        error = []
+        if not isfloat(self.com_center_w.lat):
+            error.append("Широта наземного пункта связи")
+        if not isfloat(self.com_center_w.lon):
+            error.append("Долгота наземного пункта связи")
+        if not self.parameters_w.time_line.text().isnumeric():
+            error.append("Дни сеанса связи")
+        if not isfloat(self.parameters_w.degree_line.text()):
+            error.append("Минимальный угол")
+        elif float(self.parameters_w.degree_line.text()) > 90:
+            error.append("Минимальный угол")
+        if len(error) == 0:
             td = int(self.parameters_w.time_line.text())
-            degrees = int(self.parameters_w.degree_line.text())
+            degrees = float(self.parameters_w.degree_line.text())
             t0 = self.time
             t1 = self.time + timedelta(days=td)
             stp = wgs84.latlon(self.com_center_w.lat, self.com_center_w.lon)
@@ -364,31 +393,44 @@ class MainWindow(QtWidgets.QMainWindow):
                            f'\tДлит.:\t{dif_t_str}')
                     # print(str)
                     self.list_w.sessions_list.addItem(str)
-
+        if len(error) > 0:
+            dlg = QtWidgets.QDialog(self)
+            dlg.setWindowTitle("Ошибка")
+            main_layout = QtWidgets.QVBoxLayout()
+            label = QtWidgets.QLabel("Ошибки:")
+            main_layout.addWidget(label)
+            for i in range(len(error)):
+                label_error = QtWidgets.QLabel(f"{error[i]}")
+                main_layout.addWidget(label_error)
+            dlg.setLayout(main_layout)
+            dlg.exec()
+    def clear_button_clicked(self):
+        self.list_w.sessions_list.clear()
 
     def base_coords_handler(self, lat, lon):
         self.com_center_w.show_coords(lat, lon)
         # print(lat, lon)
 
     def base_show(self):
-        if self.com_center_w.lat_line_edit.text() == '':
+        if isfloat(self.com_center_w.lat_line.text()):
+            lat = float(self.com_center_w.lat_line.text())
+        else:
             lat = 0
+        if isfloat(self.com_center_w.lon_line.text()):
+            lon = float(self.com_center_w.lon_line.text())
         else:
-            lat = float(self.com_center_w.lat_line_edit.text())
-        if self.com_center_w.lon_line_edit.text() == '':
             lon = 0
-        else:
-            lon = float(self.com_center_w.lon_line_edit.text())
         pix_lat, pix_lon = self.g_viewer.geo_to_pix(lat, lon)
-        print(pix_lat, pix_lon)
+        # print(pix_lat, pix_lon)d
+        self.com_center_w.show_coords(lat, lon)
         self.g_viewer.move_base_to(pix_lat, pix_lon)
 
-
     def sat_show(self):
-        coords = self.get_satellite_coordinates()
+        satellite_id = int(self.spacecraft_w.satellites_id[self.spacecraft_w.satellites_box.currentIndex()])
+        coords = self.get_satellite_coordinates(satellite_id)
         self.spacecraft_w.show_coords(coords[0], coords[1])
         self.g_viewer.move_sat_to(coords[0], coords[1])
-        coords = self.get_satellite_path_coordinates()
+        coords = self.get_satellite_path_coordinates(satellite_id)
         r_sat = 255
         g_sat = 0
         b_sat = 0
@@ -409,7 +451,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.g_viewer.draw_dot_by_geo(i[0], i[1], QtGui.QColor(r_sat, g_sat, b_sat))
 
 
-    def get_satellite_coordinates(self, number=57191):
+    def get_satellite_coordinates(self, number):
         ts = load.timescale()
         t = ts.now()
         self.time = t
@@ -425,17 +467,17 @@ class MainWindow(QtWidgets.QMainWindow):
         lat_satellite, lon_satellite = wgs84.latlon_of(geocentric)
         return lat_satellite.degrees, lon_satellite.degrees
 
-    def get_satellite_path_coordinates(self, number=57191):
+    def get_satellite_path_coordinates(self, number):
         ts = load.timescale()
         t1 = ts.now()
         # t1 = t + timedelta(minutes=5)
         stations_url = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle'
         satellites = load.tle_file(stations_url)
-        print('Loaded', len(satellites), 'satellites')
+        # print('Loaded', len(satellites), 'satellites')
         by_number = {sat.model.satnum: sat for sat in satellites}
         satellite = by_number[number]
         # by_name = {sat.name: sat for sat in satellites}
-        # satellite = by_name['POLYTECH-UNIVERSE 3 (R*)']
+        # satellite = by_name[name]
         clist = []
         for i in range(300):
             t1 += timedelta(minutes=1)
