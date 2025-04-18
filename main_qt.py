@@ -1,9 +1,9 @@
 import sys
 
+from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QIntValidator
 from PyQt6 import QtCore, QtWidgets, QtGui
 from PyQt6.QtGui import QDoubleValidator
-from sgp4.propagation import false
 from skyfield.api import load
 from skyfield.toposlib import wgs84
 from datetime import timedelta
@@ -54,6 +54,9 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         self.width = self.x1 - self.x0
         self.ppgw = (self.xsq1 - self.xsq0) / 30
 
+        self.start_lon = 30.31410
+        self.start_lat = 59.93860
+
         self.pic_size = 60
         self.pic_size_2 = self.pic_size // 2
         self.pic_sat = QtWidgets.QGraphicsPixmapItem()
@@ -62,6 +65,7 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         self.scene.addItem(self.pic_sat)
         self.pic_base = QtWidgets.QGraphicsPixmapItem()
         self.pic_base.setPixmap(QtGui.QPixmap('base.png').scaled(self.pic_size, self.pic_size, ))
+        # x, y = self.geo_to_pix(self.start_y, self.start_x)
         self.scene.addItem(self.pic_base)
 
         self.scene.installEventFilter(self)
@@ -86,14 +90,19 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         if event.type() == QtCore.QEvent.Type.GraphicsSceneMousePress:
             if event.button() == QtCore.Qt.MouseButton.RightButton:
                 item = self.scene.itemAt(event.scenePos(), QtGui.QTransform())
-                if isinstance(item, QtWidgets.QGraphicsPixmapItem):
+                if isinstance(item, QtWidgets.QGraphicsPixmapItem) and (item == self.img or item == self.pic_base):
                     # map the scene position to item coordinates
                     map = item.mapFromScene(event.scenePos())
+                    if item == self.pic_base:
+                        gcoo = self.geo_to_pix(self.start_lat, self.start_lon)
+                        map = QPointF(gcoo[0], gcoo[1])
                     # print(f'mouse is on pixmap at coordinates {map.x()}, {map.y()}')
                     geocoo = self.pix_to_geo(map.x(), map.y())
                     self.base_coords_out_signal.emit(geocoo[0], geocoo[1])
                     # print(f'mouse is on pixmap at coordinates {geocoo}')
                     self.pic_base.setPos(map.x() - self.pic_size_2, map.y() - self.pic_size_2)
+
+
 
         return super().eventFilter(source, event)
 
@@ -163,11 +172,11 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 
 
 class ComCenterWidget(QtWidgets.QWidget):
-    def __init__(self):
+    def __init__(self, start_lon=0, start_lat=0):
         super().__init__()
-        self.lat = 59.93860
+        self.lat = start_lat
         lat_dms = Angle(degrees=float(self.lat))
-        self.lon = 30.31410
+        self.lon = start_lon
         lon_dms = Angle(degrees= float(self.lon))
 
         main_layout = QtWidgets.QVBoxLayout()
@@ -212,9 +221,15 @@ class ComCenterWidget(QtWidgets.QWidget):
         self.lon = lon
         lon_deg = str(Angle(degrees= float(self.lon)))
         self.lat_line.setText(f'{lat:.5f}')
-        self.lat_deg_label.setText(f"            {lat_deg}")
+        if lat < 0:
+            self.lat_deg_label.setText(f"S        {lat_deg}")
+        else:
+            self.lat_deg_label.setText(f"N        {lat_deg}")
         self.lon_line.setText(f'{lon:.5f}')
-        self.lon_deg_label.setText(f"            {lon_deg}")
+        if lon < 0:
+            self.lon_deg_label.setText(f"W        {lon_deg}")
+        else:
+            self.lon_deg_label.setText(f"E        {lon_deg}")
 
 
     def get_coords(self):
@@ -281,17 +296,20 @@ class SpacecraftWidget(QtWidgets.QWidget):
         title_layout = QtWidgets.QHBoxLayout()
         title_label = QtWidgets.QLabel("Космический аппарат")
 
+        satellites_url = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle'
+        self.satellites_file = load.tle_file(satellites_url)
         with open('gp.php') as gp:
             lines = gp.readlines()
             self.satellites = []
-            self.satellites_id = []
             for i in range(0, len(lines), 3):
-                self.satellites.append(lines[i].strip('\n'))
-                self.satellites_id.append(lines[i+2].split(' ')[1])
+                self.satellites.append(lines[i].strip('\n').strip())
         self.satellites_box = QtWidgets.QComboBox()
         self.satellites.sort()
         self.satellites_box.addItems(self.satellites)
         self.satellites_box.setCurrentText('POLYTECH-UNIVERSE 3 (R*)')
+        self.satellites_box.setEditable(True)
+        self.satellites_box.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
+        self.satellites_box.completer().setCompletionMode(QtWidgets.QCompleter.CompletionMode.PopupCompletion)
         self.button_update = QtWidgets.QPushButton('Обновить')
 
         self.lat_label = QtWidgets.QLabel("LAT: ")
@@ -311,13 +329,16 @@ class SpacecraftWidget(QtWidgets.QWidget):
 
     def show_coords(self, lat, lon):
         self.lat_label.setText("LAT: " + f'{lat:.5f}')
-        self.lat_deg_label.setText("          " + f'{Angle(degrees= lat)}')
         self.lon_label.setText("LON: " + f'{lon:.5f}')
-        self.lon_deg_label.setText("           " + f'{Angle(degrees= lon)}')
+        if lat < 0:
+            self.lat_deg_label.setText("S       " + f'{Angle(degrees= lat)}')
+        else:
+            self.lat_deg_label.setText("N       " + f'{Angle(degrees= lat)}')
+        if lon < 0:
+            self.lon_deg_label.setText("W       " + f'{Angle(degrees= lon)}')
+        else:
+            self.lon_deg_label.setText("E       " + f'{Angle(degrees= lon)}')
 
-    # def download_gph(self):
-    #     satellites_url = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle'
-    #     satellites = load.tle_file(satellites_url)
 
 
 
@@ -329,10 +350,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.time = None
         self.g_viewer = MainGraphicView()
         self.g_viewer.base_coords_out_signal.connect(self.base_coords_handler)
-        self.com_center_w = ComCenterWidget()
+        self.com_center_w = ComCenterWidget(self.g_viewer.start_lon, self.g_viewer.start_lat)
         self.spacecraft_w = SpacecraftWidget()
         self.parameters_w = ParametersWidget()
-        self.spacecraft_w.satellites_box.currentTextChanged.connect(self.sat_show)
+        self.spacecraft_w.satellites_box.textActivated.connect(self.sat_show)
         self.spacecraft_w.button_update.clicked.connect(self.sat_show)
         self.parameters_w.start_button.clicked.connect(self.start_button_clicked)
         self.parameters_w.clear_button.clicked.connect(self.clear_button_clicked)
@@ -457,7 +478,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.g_viewer.move_base_to(pix_lat, pix_lon)
 
     def sat_show(self):
-        satellite_id = int(self.spacecraft_w.satellites_id[self.spacecraft_w.satellites_box.currentIndex()])
+        satellite_id = self.spacecraft_w.satellites_box.currentText()
         coords = self.get_satellite_coordinates(satellite_id)
         self.spacecraft_w.show_coords(coords[0], coords[1])
         self.g_viewer.move_sat_to(coords[0], coords[1])
@@ -483,34 +504,26 @@ class MainWindow(QtWidgets.QMainWindow):
             self.g_viewer.draw_dot_by_geo(i[0], i[1], QtGui.QColor(r_sat, g_sat, b_sat))
 
 
-    def get_satellite_coordinates(self, number):
+    def get_satellite_coordinates(self, name):
         ts = load.timescale()
         t = ts.now()
         self.time = t
-        satellites_url = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle'
-        satellites = load.tle_file(satellites_url)
-        # satellites.sort(key=lambda sat: sat.name)
-        # print('Loaded', len(satellites), 'satellites')
-        by_number = {sat.model.satnum: sat for sat in satellites}
-        satellite = by_number[number]
-        # by_name = {sat.name: sat for sat in satellites}
-        # satellite = by_name['POLYTECH-UNIVERSE 3 (R*)']
+        # by_number = {sat.model.satnum: sat for sat in satellites}
+        # satellite = by_number[number]
+        by_name = {sat.name: sat for sat in self.spacecraft_w.satellites_file}
+        satellite = by_name[name]
         self.satellite = satellite
         geocentric = satellite.at(t)
         lat_satellite, lon_satellite = wgs84.latlon_of(geocentric)
         return lat_satellite.degrees, lon_satellite.degrees
 
-    def get_satellite_path_coordinates(self, number):
+    def get_satellite_path_coordinates(self, name):
         ts = load.timescale()
         t1 = ts.now()
-        # t1 = t + timedelta(minutes=5)
-        stations_url = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle'
-        satellites = load.tle_file(stations_url)
-        # print('Loaded', len(satellites), 'satellites')
-        by_number = {sat.model.satnum: sat for sat in satellites}
-        satellite = by_number[number]
-        # by_name = {sat.name: sat for sat in satellites}
-        # satellite = by_name[name]
+        # by_number = {sat.model.satnum: sat for sat in satellites}
+        # satellite = by_number[number]
+        by_name = {sat.name: sat for sat in self.spacecraft_w.satellites_file}
+        satellite = by_name[name]
         clist = []
         for i in range(300):
             t1 += timedelta(minutes=1)
