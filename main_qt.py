@@ -180,7 +180,15 @@ class ComCenterWidget(QtWidgets.QWidget):
         lon_dms = Angle(degrees= float(self.lon))
 
         main_layout = QtWidgets.QVBoxLayout()
-        title_label = QtWidgets.QLabel("Наземный Пункт Управления")
+        title_layout = QtWidgets.QHBoxLayout()
+        title_label = QtWidgets.QLabel("Наземный Пункт Управления:")
+        self.com_box = QtWidgets.QComboBox()
+        self.com_box.addItem("НПУ")
+        self.add_button = QtWidgets.QPushButton("Добавить")
+        self.delete_button = QtWidgets.QPushButton("Удалить")
+        self.com_box.setEditable(True)
+        self.com_box.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
+        self.com_box.completer().setCompletionMode(QtWidgets.QCompleter.CompletionMode.PopupCompletion)
         lat_layout = QtWidgets.QHBoxLayout()
         lat_deg_layout = QtWidgets.QHBoxLayout()
         lat_label = QtWidgets.QLabel("LAT: ")
@@ -201,9 +209,13 @@ class ComCenterWidget(QtWidgets.QWidget):
         lon_validator.setLocale(QtCore.QLocale("en_US"))
         self.lon_line.setValidator(lon_validator)
 
-        main_layout.addWidget(title_label)
+        main_layout.addLayout(title_layout)
         main_layout.addLayout(lat_layout)
         main_layout.addLayout(lat_deg_layout)
+        title_layout.addWidget(title_label)
+        title_layout.addWidget(self.com_box)
+        title_layout.addWidget(self.add_button)
+        title_layout.addWidget(self.delete_button)
         lat_layout.addWidget(lat_label)
         lat_layout.addWidget(self.lat_line)
         lat_deg_layout.addWidget(self.lat_deg_label)
@@ -353,6 +365,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.com_center_w = ComCenterWidget(self.g_viewer.start_lon, self.g_viewer.start_lat)
         self.spacecraft_w = SpacecraftWidget()
         self.parameters_w = ParametersWidget()
+        self.com_center_w.add_button.clicked.connect(self.add_button_clicked)
+        self.com_center_w.delete_button.clicked.connect(self.delete_button_clicked)
         self.spacecraft_w.satellites_box.textActivated.connect(self.sat_show)
         self.spacecraft_w.button_update.clicked.connect(self.sat_show)
         self.parameters_w.start_button.clicked.connect(self.start_button_clicked)
@@ -443,6 +457,14 @@ class MainWindow(QtWidgets.QMainWindow):
             dlg.setLayout(main_layout)
             dlg.exec()
 
+    def add_button_clicked(self):
+        if self.com_center_w.com_box.findText(self.com_center_w.com_box.currentText()) == -1:
+            self.com_center_w.com_box.addItem(self.com_center_w.com_box.currentText())
+        # else:
+        #     self.com_center_w.com_box.addItem(f"{self.com_center_w.com_box.count()+1}")
+
+    def delete_button_clicked(self):
+        self.com_center_w.com_box.removeItem(self.com_center_w.com_box.currentIndex())
     def clear_button_clicked(self):
         self.list_w.sessions_list.clear()
 
