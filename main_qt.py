@@ -22,6 +22,7 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 
     def __init__(self):
         super().__init__()
+        self.com_center_w = ComCenterWidget()
         self.SCALE_FACTOR = 1.25
         self.scene = QtWidgets.QGraphicsScene()
         self.img = QtWidgets.QGraphicsPixmapItem()
@@ -100,10 +101,7 @@ class MainGraphicView(QtWidgets.QGraphicsView):
                     geocoo = self.pix_to_geo(map.x(), map.y())
                     self.base_coords_out_signal.emit(geocoo[0], geocoo[1])
                     # print(f'mouse is on pixmap at coordinates {geocoo}')
-                    self.pic_base.setPos(map.x() - self.pic_size_2, map.y() - self.pic_size_2)
-
-
-
+                    self.move_base_to(map.x(), map.y())
         return super().eventFilter(source, event)
 
     def move_base_to(self, lat, lon):
@@ -174,21 +172,23 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 class ComCenterWidget(QtWidgets.QWidget):
     def __init__(self, start_lon=0, start_lat=0):
         super().__init__()
-        self.lat = start_lat
-        lat_dms = Angle(degrees=float(self.lat))
-        self.lon = start_lon
-        lon_dms = Angle(degrees= float(self.lon))
+        self.lat = float(start_lat)
+        self.lon = float(start_lon)
+        lat_dms = Angle(degrees=self.lat)
+        lon_dms = Angle(degrees=self.lon)
+        self.base_list = [[self.lat, self.lon]]
+
 
         main_layout = QtWidgets.QVBoxLayout()
         title_layout = QtWidgets.QHBoxLayout()
         title_label = QtWidgets.QLabel("Наземный Пункт Управления:")
-        self.com_box = QtWidgets.QComboBox()
-        self.com_box.addItem("НПУ")
+        self.base_box = QtWidgets.QComboBox()
+        self.base_box.addItem("НПУ")
         self.add_button = QtWidgets.QPushButton("Добавить")
         self.delete_button = QtWidgets.QPushButton("Удалить")
-        self.com_box.setEditable(True)
-        self.com_box.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
-        self.com_box.completer().setCompletionMode(QtWidgets.QCompleter.CompletionMode.PopupCompletion)
+        self.base_box.setEditable(True)
+        self.base_box.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
+        self.base_box.completer().setCompletionMode(QtWidgets.QCompleter.CompletionMode.PopupCompletion)
         lat_layout = QtWidgets.QHBoxLayout()
         lat_deg_layout = QtWidgets.QHBoxLayout()
         lat_label = QtWidgets.QLabel("LAT: ")
@@ -213,7 +213,7 @@ class ComCenterWidget(QtWidgets.QWidget):
         main_layout.addLayout(lat_layout)
         main_layout.addLayout(lat_deg_layout)
         title_layout.addWidget(title_label)
-        title_layout.addWidget(self.com_box)
+        title_layout.addWidget(self.base_box)
         title_layout.addWidget(self.add_button)
         title_layout.addWidget(self.delete_button)
         lat_layout.addWidget(lat_label)
@@ -228,16 +228,17 @@ class ComCenterWidget(QtWidgets.QWidget):
         self.setLayout(main_layout)
 
     def show_coords(self, lat, lon):
-        self.lat = lat
+        self.base_list[self.base_box.currentIndex()] = [lat, lon]
+        self.lat = f'{lat:.5f}'
         lat_deg = str(Angle(degrees=float(self.lat)))
-        self.lon = lon
+        self.lon = f"{lon:.5f}"
         lon_deg = str(Angle(degrees= float(self.lon)))
-        self.lat_line.setText(f'{lat:.5f}')
+        self.lat_line.setText(f"{self.lat.rstrip("0").rstrip(".")}")
         if lat < 0:
             self.lat_deg_label.setText(f"S        {lat_deg}")
         else:
             self.lat_deg_label.setText(f"N        {lat_deg}")
-        self.lon_line.setText(f'{lon:.5f}')
+        self.lon_line.setText(f'{self.lon.rstrip("0").rstrip(".")}')
         if lon < 0:
             self.lon_deg_label.setText(f"W        {lon_deg}")
         else:
@@ -340,16 +341,18 @@ class SpacecraftWidget(QtWidgets.QWidget):
         self.setLayout(main_layout)
 
     def show_coords(self, lat, lon):
-        self.lat_label.setText("LAT: " + f'{lat:.5f}')
-        self.lon_label.setText("LON: " + f'{lon:.5f}')
-        if lat < 0:
-            self.lat_deg_label.setText("S       " + f'{Angle(degrees= lat)}')
+        lat = f'{lat:.5f}'
+        lon = f'{lon:.5f}'
+        self.lat_label.setText("LAT: " + f'{lat.rstrip("0").rstrip(".")}')
+        self.lon_label.setText("LON: " + f'{lon.rstrip("0").rstrip(".")}')
+        if float(lat) < 0:
+            self.lat_deg_label.setText("S       " + f'{Angle(degrees= float(lat))}')
         else:
-            self.lat_deg_label.setText("N       " + f'{Angle(degrees= lat)}')
-        if lon < 0:
-            self.lon_deg_label.setText("W       " + f'{Angle(degrees= lon)}')
+            self.lat_deg_label.setText("N       " + f'{Angle(degrees= float(lat))}')
+        if float(lon) < 0:
+            self.lon_deg_label.setText("W       " + f'{Angle(degrees= float(lon))}')
         else:
-            self.lon_deg_label.setText("E       " + f'{Angle(degrees= lon)}')
+            self.lon_deg_label.setText("E       " + f'{Angle(degrees= float(lon))}')
 
 
 
@@ -362,9 +365,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.time = None
         self.g_viewer = MainGraphicView()
         self.g_viewer.base_coords_out_signal.connect(self.base_coords_handler)
+        self.start_pos = [self.g_viewer.start_lat, self.g_viewer.start_lon]
         self.com_center_w = ComCenterWidget(self.g_viewer.start_lon, self.g_viewer.start_lat)
         self.spacecraft_w = SpacecraftWidget()
         self.parameters_w = ParametersWidget()
+        self.com_center_w.base_box.currentIndexChanged.connect(self.change_base)
         self.com_center_w.add_button.clicked.connect(self.add_button_clicked)
         self.com_center_w.delete_button.clicked.connect(self.delete_button_clicked)
         self.spacecraft_w.satellites_box.textActivated.connect(self.sat_show)
@@ -458,13 +463,32 @@ class MainWindow(QtWidgets.QMainWindow):
             dlg.exec()
 
     def add_button_clicked(self):
-        if self.com_center_w.com_box.findText(self.com_center_w.com_box.currentText()) == -1:
-            self.com_center_w.com_box.addItem(self.com_center_w.com_box.currentText())
+        if self.com_center_w.base_box.findText(self.com_center_w.base_box.currentText()) == -1:
+            self.com_center_w.base_box.addItem(self.com_center_w.base_box.currentText())
+            self.com_center_w.base_list.append(self.start_pos)
+            lat = self.com_center_w.base_list[self.com_center_w.base_box.currentIndex()][0]
+            lon = self.com_center_w.base_list[self.com_center_w.base_box.currentIndex()][1]
+            pix_lat, pix_lon = self.g_viewer.geo_to_pix(lat, lon)
+            self.com_center_w.show_coords(lat, lon)
+            self.g_viewer.move_base_to(pix_lat, pix_lon)
         # else:
         #     self.com_center_w.com_box.addItem(f"{self.com_center_w.com_box.count()+1}")
+        #     self.com_center_w.com_list.append(self.start_pos)
+        #     lat = self.com_center_w.com_list[self.com_center_w.com_box.currentIndex()][0]
+        #     lon = self.com_center_w.com_list[self.com_center_w.com_box.currentIndex()][1]
+        #     pix_lat, pix_lon = self.g_viewer.geo_to_pix(lat, lon)
+        #     self.com_center_w.show_coords(lat, lon)
+        #     self.g_viewer.move_base_to(pix_lat, pix_lon)
 
     def delete_button_clicked(self):
-        self.com_center_w.com_box.removeItem(self.com_center_w.com_box.currentIndex())
+        self.com_center_w.base_box.removeItem(self.com_center_w.base_box.currentIndex())
+
+    def change_base(self):
+        lat = self.com_center_w.base_list[self.com_center_w.base_box.currentIndex()][0]
+        lon = self.com_center_w.base_list[self.com_center_w.base_box.currentIndex()][1]
+        pix_lat, pix_lon = self.g_viewer.geo_to_pix(lat, lon)
+        self.com_center_w.show_coords(lat, lon)
+        self.g_viewer.move_base_to(pix_lat, pix_lon)
     def clear_button_clicked(self):
         self.list_w.sessions_list.clear()
 
@@ -489,13 +513,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 lon = -180
         else:
             lon = 0
-        # lat = f'{lat:.5f}'
-        # lon = f'{lon:.5f}'
-        # for i in range(5):
-        #     if lat[-i] == '0':
-        #
+
+        self.com_center_w.base_list[self.com_center_w.base_box.currentIndex()] = [lat, lon]
         pix_lat, pix_lon = self.g_viewer.geo_to_pix(lat, lon)
-        # print(pix_lat, pix_lon)d
+        # print(pix_lat, pix_lon)
         self.com_center_w.show_coords(lat, lon)
         self.g_viewer.move_base_to(pix_lat, pix_lon)
 
