@@ -9,6 +9,7 @@ from skyfield.toposlib import wgs84
 from datetime import timedelta
 from pytz import timezone
 from skyfield.units import Angle
+from random import randint
 
 def isfloat(s):
     try:
@@ -19,10 +20,10 @@ def isfloat(s):
 
 class MainGraphicView(QtWidgets.QGraphicsView):
     base_coords_out_signal = QtCore.pyqtSignal(float, float)
+    base_change_signal = QtCore.pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
-        self.com_center_w = ComCenterWidget()
         self.SCALE_FACTOR = 1.25
         self.scene = QtWidgets.QGraphicsScene()
         self.img = QtWidgets.QGraphicsPixmapItem()
@@ -60,19 +61,39 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 
         self.pic_size = 60
         self.pic_size_2 = self.pic_size // 2
-        self.pic_sat = QtWidgets.QGraphicsPixmapItem()
-        self.pic_sat.setPixmap(QtGui.QPixmap('sat.png').scaled(self.pic_size, self.pic_size))
+        self.pic_sat = QtWidgets.QGraphicsPixmapItem(QtGui.QPixmap('sat.png').scaled(self.pic_size, self.pic_size))
         # self.pic_sat.setPixmap(QtGui.QPixmap('sat.png').scaled(self.pic_size, self.pic_size, QtCore.Qt.AspectRatioMode.KeepAspectRatio, QtCore.Qt.TransformationMode.SmoothTransformation))
         self.scene.addItem(self.pic_sat)
-        self.pic_base = QtWidgets.QGraphicsPixmapItem()
-        self.pic_base.setPixmap(QtGui.QPixmap('base.png').scaled(self.pic_size, self.pic_size, ))
+        self.pic_base = QtWidgets.QGraphicsPixmapItem(QtGui.QPixmap('base.png').scaled(self.pic_size, self.pic_size, ))
         # x, y = self.geo_to_pix(self.start_y, self.start_x)
-        self.scene.addItem(self.pic_base)
+
+        self.color_base_list = []
+        self.pic_base_list = []
+        self.index = 0
+        self.add_base(randint(0, 255), randint(0, 255), randint(0, 255))
 
         self.scene.installEventFilter(self)
         self.setMouseTracking(True)
 
         self.list_dots = []
+
+    def change_color(self, r: int, g: int, b: int):
+        new_color = self.color_base_list[self.index]
+        new_color.setColor(QtGui.QColor(r, g, b))
+        self.color_base_list[self.index] = new_color
+
+    def change_base(self, number):
+        self.index = number
+
+    def add_base(self, r: int, g: int, b: int):
+        self.pic_base_list.append(QtWidgets.QGraphicsPixmapItem(self.pic_base.pixmap()))
+        self.index = len(self.pic_base_list) - 1
+        new_color = QtWidgets.QGraphicsColorizeEffect()
+        new_color.setStrength(1.0)
+        new_color.setColor(QtGui.QColor(r, g, b))
+        self.color_base_list.append(new_color)
+        self.pic_base_list[self.index].setGraphicsEffect(new_color)
+        self.scene.addItem(self.pic_base_list[self.index])
 
     def draw_dot_by_geo(self, lat, lon, color=QtGui.QColor('black'), size=5):
         pen = QtGui.QPen(color)
@@ -89,31 +110,36 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 
     def eventFilter(self, source, event):
         if event.type() == QtCore.QEvent.Type.GraphicsSceneMousePress:
+            item = self.scene.itemAt(event.scenePos(), QtGui.QTransform())
             if event.button() == QtCore.Qt.MouseButton.RightButton:
-                item = self.scene.itemAt(event.scenePos(), QtGui.QTransform())
-                if isinstance(item, QtWidgets.QGraphicsPixmapItem) and (item == self.img or item == self.pic_base):
-                    # map the scene position to item coordinates
-                    map = item.mapFromScene(event.scenePos())
-                    if item == self.pic_base:
+                if isinstance(item, QtWidgets.QGraphicsPixmapItem) and (item == self.img or item == self.pic_base_list[self.index]):
+                    # map_coords the scene position to item coordinates
+                    map_coords = item.mapFromScene(event.scenePos())
+                    if item == self.pic_base_list[self.index]:
                         gcoo = self.geo_to_pix(self.start_lat, self.start_lon)
-                        map = QPointF(gcoo[0], gcoo[1])
-                    # print(f'mouse is on pixmap at coordinates {map.x()}, {map.y()}')
-                    geocoo = self.pix_to_geo(map.x(), map.y())
+                        map_coords = QPointF(gcoo[0], gcoo[1])
+                    # print(f'mouse is on pixmap at coordinates {map_coords.x()}, {map_coords.y()}')
+                    geocoo = self.pix_to_geo(map_coords.x(), map_coords.y())
                     self.base_coords_out_signal.emit(geocoo[0], geocoo[1])
                     # print(f'mouse is on pixmap at coordinates {geocoo}')
-                    self.move_base_to(map.x(), map.y())
+                    self.move_base_to(map_coords.x(), map_coords.y())
+            if event.button() == QtCore.Qt.MouseButton.LeftButton:
+                if isinstance(item, QtWidgets.QGraphicsPixmapItem) and item != self.img:
+                    index = self.pic_base_list.index(item)
+                    self.change_base(index)
+                    self.base_change_signal.emit(index)
         return super().eventFilter(source, event)
 
-    def move_base_to(self, lat, lon):
-        self.pic_base.setPos(lat - self.pic_size_2, lon - self.pic_size_2)
+    def move_base_to(self, lat: float, lon: float):
+        self.pic_base_list[self.index].setPos(lat - self.pic_size_2, lon - self.pic_size_2)
 
-    def move_sat_to(self, lat, lon):
+    def move_sat_to(self, lat: float, lon: float):
         satx, saty = self.geo_to_pix(lat, lon)
         satx -= self.pic_size_2
         saty -= self.pic_size_2
         self.pic_sat.setPos(satx, saty)
 
-    def geo_to_pix(self, lat, lon):
+    def geo_to_pix(self, lat: float, lon: float):
         y = lat * self.ppgh
         y = self.ymid + self.y0 - y
         x = lon * self.ppgw
@@ -125,14 +151,14 @@ class MainGraphicView(QtWidgets.QGraphicsView):
             x = self.x180 + x
         return x, y
 
-    def pix_to_geo(self, x, y):
+    def pix_to_geo(self, x: int, y: int):
         # print(f'pixmap at coordinates x:{x} y:{y}')
         y = y - self.y0
         lat = 90 - (y / self.ppgh)
         lon = (x - self.xsq0) / self.ppgw
         return lat, lon
 
-    def reset_view(self, scale=1):
+    def reset_view(self, scale = 1):
         rect = QtCore.QRectF(self.img.pixmap().rect())
         if not rect.isNull():
             self.setSceneRect(rect)
@@ -170,7 +196,7 @@ class MainGraphicView(QtWidgets.QGraphicsView):
 
 
 class ComCenterWidget(QtWidgets.QWidget):
-    def __init__(self, start_lon=0, start_lat=0):
+    def __init__(self, start_lon: float, start_lat: float):
         super().__init__()
         self.lat = float(start_lat)
         self.lon = float(start_lon)
@@ -182,13 +208,18 @@ class ComCenterWidget(QtWidgets.QWidget):
         main_layout = QtWidgets.QVBoxLayout()
         title_layout = QtWidgets.QHBoxLayout()
         title_label = QtWidgets.QLabel("Наземный Пункт Управления:")
+        button_layout = QtWidgets.QHBoxLayout()
         self.base_box = QtWidgets.QComboBox()
         self.base_box.addItem("НПУ")
+        self.color_base = QtWidgets.QPushButton()
+        self.color_base.setStyleSheet(f"background-color: rgb({0, 0, 0});")
         self.add_button = QtWidgets.QPushButton("Добавить")
         self.delete_button = QtWidgets.QPushButton("Удалить")
+        self.color_button = QtWidgets.QPushButton("Цвет")
         self.base_box.setEditable(True)
         self.base_box.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
         self.base_box.completer().setCompletionMode(QtWidgets.QCompleter.CompletionMode.PopupCompletion)
+
         lat_layout = QtWidgets.QHBoxLayout()
         lat_deg_layout = QtWidgets.QHBoxLayout()
         lat_label = QtWidgets.QLabel("LAT: ")
@@ -210,12 +241,15 @@ class ComCenterWidget(QtWidgets.QWidget):
         self.lon_line.setValidator(lon_validator)
 
         main_layout.addLayout(title_layout)
+        main_layout.addLayout(button_layout)
         main_layout.addLayout(lat_layout)
         main_layout.addLayout(lat_deg_layout)
         title_layout.addWidget(title_label)
         title_layout.addWidget(self.base_box)
-        title_layout.addWidget(self.add_button)
-        title_layout.addWidget(self.delete_button)
+        title_layout.addWidget(self.color_base)
+        button_layout.addWidget(self.add_button)
+        button_layout.addWidget(self.delete_button)
+        button_layout.addWidget(self.color_button)
         lat_layout.addWidget(lat_label)
         lat_layout.addWidget(self.lat_line)
         lat_deg_layout.addWidget(self.lat_deg_label)
@@ -227,7 +261,10 @@ class ComCenterWidget(QtWidgets.QWidget):
 
         self.setLayout(main_layout)
 
-    def show_coords(self, lat, lon):
+    def change_color(self, r: int = 0, g: int = 0, b: int = 0):
+        self.color_base.setStyleSheet(f"background-color: rgb({r}, {g}, {b});")
+
+    def show_coords(self, lat: float, lon: float):
         self.base_list[self.base_box.currentIndex()] = [lat, lon]
         self.lat = f'{lat:.5f}'
         lat_deg = str(Angle(degrees=float(self.lat)))
@@ -248,6 +285,46 @@ class ComCenterWidget(QtWidgets.QWidget):
     def get_coords(self):
         return self.lat, self.lon
 
+class ColorWindow(QtWidgets.QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Цвет")
+        color_layout = QtWidgets.QVBoxLayout()
+        random_layout = QtWidgets.QHBoxLayout()
+        red_layout = QtWidgets.QHBoxLayout()
+        green_layout = QtWidgets.QHBoxLayout()
+        blue_layout = QtWidgets.QHBoxLayout()
+        red_label = QtWidgets.QLabel("r: ")
+        green_label = QtWidgets.QLabel("g: ")
+        blue_label = QtWidgets.QLabel("b: ")
+        random_label = QtWidgets.QLabel("Случайно: ")
+        self.finish_button = QtWidgets.QPushButton("Изменить")
+        self.random_check = QtWidgets.QCheckBox()
+        self.random_check.setCheckState(QtCore.Qt.CheckState.Checked)
+        self.red_line = QtWidgets.QLineEdit("0")
+        self.green_line = QtWidgets.QLineEdit("0")
+        self.blue_line = QtWidgets.QLineEdit("0")
+
+        color_line_validator = QIntValidator(0, 255)
+        self.red_line.setValidator(color_line_validator)
+        self.green_line.setValidator(color_line_validator)
+        self.blue_line.setValidator(color_line_validator)
+
+        color_layout.addLayout(red_layout)
+        color_layout.addLayout(green_layout)
+        color_layout.addLayout(blue_layout)
+        color_layout.addLayout(random_layout)
+        color_layout.addWidget(self.finish_button)
+        red_layout.addWidget(red_label)
+        red_layout.addWidget(self.red_line)
+        green_layout.addWidget(green_label)
+        green_layout.addWidget(self.green_line)
+        blue_layout.addWidget(blue_label)
+        blue_layout.addWidget(self.blue_line)
+        random_layout.addWidget(random_label)
+        random_layout.addWidget(self.random_check)
+
+        self.setLayout(color_layout)
 
 class ParametersWidget(QtWidgets.QWidget):
     def __init__(self):
@@ -365,19 +442,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.time = None
         self.g_viewer = MainGraphicView()
         self.g_viewer.base_coords_out_signal.connect(self.base_coords_handler)
-        self.start_pos = [self.g_viewer.start_lat, self.g_viewer.start_lon]
+        self.g_viewer.base_change_signal.connect(self.base_change_handler)
         self.com_center_w = ComCenterWidget(self.g_viewer.start_lon, self.g_viewer.start_lat)
         self.spacecraft_w = SpacecraftWidget()
         self.parameters_w = ParametersWidget()
+        self.color_w = ColorWindow()
         self.com_center_w.base_box.currentIndexChanged.connect(self.change_base)
         self.com_center_w.add_button.clicked.connect(self.add_button_clicked)
         self.com_center_w.delete_button.clicked.connect(self.delete_button_clicked)
+        self.com_center_w.color_button.clicked.connect(self.show_color_w)
         self.spacecraft_w.satellites_box.textActivated.connect(self.sat_show)
         self.spacecraft_w.button_update.clicked.connect(self.sat_show)
         self.parameters_w.start_button.clicked.connect(self.start_button_clicked)
         self.parameters_w.clear_button.clicked.connect(self.clear_button_clicked)
         self.com_center_w.lat_line.editingFinished.connect(self.base_show)
         self.com_center_w.lon_line.editingFinished.connect(self.base_show)
+        self.color_w.finish_button.clicked.connect(self.color_change)
         self.list_w = ListWidget()
         window_widget = QtWidgets.QWidget()
         main_layout = QtWidgets.QHBoxLayout()
@@ -398,6 +478,7 @@ class MainWindow(QtWidgets.QMainWindow):
         main_layout.addLayout(list_layout, 1)
         window_widget.setLayout(main_layout)
 
+        self.color_change()
         self.setCentralWidget(window_widget)
         self.base_show()
         self.sat_show()
@@ -405,6 +486,8 @@ class MainWindow(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot()
     def start_button_clicked(self):
         error = []
+        peak_t = None
+        start_t_str = None
         if not isfloat(self.com_center_w.lat):
             error.append("Широта наземного пункта связи")
         if not isfloat(self.com_center_w.lon):
@@ -424,7 +507,7 @@ class MainWindow(QtWidgets.QMainWindow):
             dif = self.satellite - stp
             te, ev = self.satellite.find_events(stp, t0, t1, altitude_degrees=degrees)
             start_t, finish_t, top = None, None, None
-            noevents = True
+            no_events = True
             for ti, event in zip(te, ev):
                 if event == 0:
                     start_t = ti.astimezone(timezone('Europe/Moscow'))
@@ -438,16 +521,16 @@ class MainWindow(QtWidgets.QMainWindow):
                     alt, az, dist = top.altaz()
                     dif_t_str = (finish_t - start_t)
                     #        alt, az = alt.degrees, az.degrees
-                    str = (f'Время (UTC+3): {peak_t}\n'
+                    text = (f'Время (UTC+3): {peak_t}\n'
                            f'\tАзимут:\t{az}\n'
                            f'\tМаксимальный угол места:\t{alt}\n'                           
                            f'\tНачало:\t{start_t_str}\n'
                            f'\tКонец:\t{finish_t_str}\n'
                            f'\tДлит.:\t{dif_t_str}')
                     # print(str)
-                    self.list_w.sessions_list.addItem(str)
-                    noevents = False
-            if noevents:
+                    self.list_w.sessions_list.addItem(text)
+                    no_events = False
+            if no_events:
                 self.list_w.sessions_list.addItem("Не найдено сеансов связи")
 
         if len(error) > 0:
@@ -464,12 +547,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def add_button_clicked(self):
         if self.com_center_w.base_box.findText(self.com_center_w.base_box.currentText()) == -1:
+            self.g_viewer.add_base(randint(0, 255), randint(0, 255), randint(0, 255))
+            self.color_change()
             self.com_center_w.base_box.addItem(self.com_center_w.base_box.currentText())
-            self.com_center_w.base_list.append(self.start_pos)
-            lat = self.com_center_w.base_list[self.com_center_w.base_box.currentIndex()][0]
-            lon = self.com_center_w.base_list[self.com_center_w.base_box.currentIndex()][1]
+            self.com_center_w.base_list.append([self.g_viewer.start_lat, self.g_viewer.start_lon])
+            self.com_center_w.base_box.setCurrentIndex(len(self.com_center_w.base_list) - 1)
+            lat = self.g_viewer.start_lat
+            lon = self.g_viewer.start_lon
             pix_lat, pix_lon = self.g_viewer.geo_to_pix(lat, lon)
             self.com_center_w.show_coords(lat, lon)
+            self.g_viewer.change_base(self.com_center_w.base_box.currentIndex())
             self.g_viewer.move_base_to(pix_lat, pix_lon)
         # else:
         #     self.com_center_w.com_box.addItem(f"{self.com_center_w.com_box.count()+1}")
@@ -481,20 +568,53 @@ class MainWindow(QtWidgets.QMainWindow):
         #     self.g_viewer.move_base_to(pix_lat, pix_lon)
 
     def delete_button_clicked(self):
+        self.g_viewer.pic_base_list.pop(self.com_center_w.base_box.currentIndex())
         self.com_center_w.base_box.removeItem(self.com_center_w.base_box.currentIndex())
 
     def change_base(self):
+        self.g_viewer.change_base(self.com_center_w.base_box.currentIndex())
         lat = self.com_center_w.base_list[self.com_center_w.base_box.currentIndex()][0]
         lon = self.com_center_w.base_list[self.com_center_w.base_box.currentIndex()][1]
         pix_lat, pix_lon = self.g_viewer.geo_to_pix(lat, lon)
         self.com_center_w.show_coords(lat, lon)
         self.g_viewer.move_base_to(pix_lat, pix_lon)
+
+    def show_color_w(self):
+        self.color_w.show()
+
+    def color_change(self):
+        if self.color_w.random_check.checkState() == QtCore.Qt.CheckState.Checked:
+            r = randint(0, 255)
+            g = randint(0, 255)
+            b = randint(0, 255)
+        else:
+            r = int(self.color_w.red_line.text())
+            g = int(self.color_w.green_line.text())
+            b = int(self.color_w.blue_line.text())
+        self.g_viewer.change_color(r, g, b)
+        self.change_rgb_base()
+
     def clear_button_clicked(self):
         self.list_w.sessions_list.clear()
 
-    def base_coords_handler(self, lat, lon):
+    def base_coords_handler(self, lat: float = 0, lon: float = 0):
         self.com_center_w.show_coords(lat, lon)
-        # print(lat, lon)
+
+    def get_rgb_base(self):
+        r, g, b, a = self.g_viewer.color_base_list[self.g_viewer.index].color().getRgb()
+        return r, g, b
+
+    def change_rgb_base(self):
+        r, g, b = self.get_rgb_base()
+        self.color_w.red_line.setText(f"{r}")
+        self.color_w.green_line.setText(f"{g}")
+        self.color_w.blue_line.setText(f"{b}")
+        self.com_center_w.change_color(r, g, b)
+
+    def base_change_handler(self, index: int):
+        self.com_center_w.base_box.setCurrentIndex(index)
+        self.change_base()
+        self.change_rgb_base()
 
     def base_show(self):
         if isfloat(self.com_center_w.lat_line.text()):
