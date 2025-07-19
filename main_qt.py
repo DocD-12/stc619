@@ -82,18 +82,24 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         new_color.setColor(QtGui.QColor(r, g, b))
         self.color_base_list[self.index] = new_color
 
-    def change_base(self, number):
+    def change_index(self, number):
         self.index = number
 
     def add_base(self, r: int, g: int, b: int):
-        self.pic_base_list.append(QtWidgets.QGraphicsPixmapItem(self.pic_base.pixmap()))
-        self.index = len(self.pic_base_list) - 1
+        new_pic_base = self.pic_base.pixmap()
+        self.pic_base_list.append(QtWidgets.QGraphicsPixmapItem(new_pic_base))
+        self.index = len(self.pic_base_list) -1
         new_color = QtWidgets.QGraphicsColorizeEffect()
         new_color.setStrength(1.0)
         new_color.setColor(QtGui.QColor(r, g, b))
         self.color_base_list.append(new_color)
         self.pic_base_list[self.index].setGraphicsEffect(new_color)
         self.scene.addItem(self.pic_base_list[self.index])
+
+    def del_base(self):
+        self.scene.removeItem(self.pic_base_list[self.index])
+        self.color_base_list.pop(self.index)
+        self.pic_base_list.pop(self.index)
 
     def draw_dot_by_geo(self, lat, lon, color=QtGui.QColor('black'), size=5):
         pen = QtGui.QPen(color)
@@ -109,25 +115,26 @@ class MainGraphicView(QtWidgets.QGraphicsView):
         self.list_dots = []
 
     def eventFilter(self, source, event):
-        if event.type() == QtCore.QEvent.Type.GraphicsSceneMousePress:
-            item = self.scene.itemAt(event.scenePos(), QtGui.QTransform())
-            if event.button() == QtCore.Qt.MouseButton.RightButton:
-                if isinstance(item, QtWidgets.QGraphicsPixmapItem) and (item == self.img or item == self.pic_base_list[self.index]):
-                    # map_coords the scene position to item coordinates
-                    map_coords = item.mapFromScene(event.scenePos())
-                    if item == self.pic_base_list[self.index]:
-                        gcoo = self.geo_to_pix(self.start_lat, self.start_lon)
-                        map_coords = QPointF(gcoo[0], gcoo[1])
-                    # print(f'mouse is on pixmap at coordinates {map_coords.x()}, {map_coords.y()}')
-                    geocoo = self.pix_to_geo(map_coords.x(), map_coords.y())
-                    self.base_coords_out_signal.emit(geocoo[0], geocoo[1])
-                    # print(f'mouse is on pixmap at coordinates {geocoo}')
-                    self.move_base_to(map_coords.x(), map_coords.y())
-            if event.button() == QtCore.Qt.MouseButton.LeftButton:
-                if isinstance(item, QtWidgets.QGraphicsPixmapItem) and item != self.img:
-                    index = self.pic_base_list.index(item)
-                    self.change_base(index)
-                    self.base_change_signal.emit(index)
+        if len(self.pic_base_list) != 0:
+            if event.type() == QtCore.QEvent.Type.GraphicsSceneMousePress:
+                item = self.scene.itemAt(event.scenePos(), QtGui.QTransform())
+                if event.button() == QtCore.Qt.MouseButton.RightButton:
+                    if isinstance(item, QtWidgets.QGraphicsPixmapItem) and (item == self.img or item == self.pic_base_list[self.index]):
+                        # map_coords the scene position to item coordinates
+                        map_coords = item.mapFromScene(event.scenePos())
+                        if item == self.pic_base_list[self.index]:
+                            gcoo = self.geo_to_pix(self.start_lat, self.start_lon)
+                            map_coords = QPointF(gcoo[0], gcoo[1])
+                        # print(f'mouse is on pixmap at coordinates {map_coords.x()}, {map_coords.y()}')
+                        geocoo = self.pix_to_geo(map_coords.x(), map_coords.y())
+                        self.base_coords_out_signal.emit(geocoo[0], geocoo[1])
+                        # print(f'mouse is on pixmap at coordinates {geocoo}')
+                        self.move_base_to(map_coords.x(), map_coords.y())
+                if event.button() == QtCore.Qt.MouseButton.LeftButton:
+                    if isinstance(item, QtWidgets.QGraphicsPixmapItem) and item != self.img:
+                        index = self.pic_base_list.index(item)
+                        self.change_index(index)
+                        self.base_change_signal.emit(index)
         return super().eventFilter(source, event)
 
     def move_base_to(self, lat: float, lon: float):
@@ -203,7 +210,6 @@ class ComCenterWidget(QtWidgets.QWidget):
         lat_dms = Angle(degrees=self.lat)
         lon_dms = Angle(degrees=self.lon)
         self.base_list = [[self.lat, self.lon]]
-
 
         main_layout = QtWidgets.QVBoxLayout()
         title_layout = QtWidgets.QHBoxLayout()
@@ -281,9 +287,14 @@ class ComCenterWidget(QtWidgets.QWidget):
         else:
             self.lon_deg_label.setText(f"E        {lon_deg}")
 
-
     def get_coords(self):
         return self.lat, self.lon
+
+    def remove_index(self, index):
+        self.base_box.removeItem(index)
+
+    def change_index(self, index):
+        self.base_box.setCurrentIndex(index)
 
 class ColorWindow(QtWidgets.QWidget):
     def __init__(self):
@@ -488,50 +499,54 @@ class MainWindow(QtWidgets.QMainWindow):
         error = []
         peak_t = None
         start_t_str = None
-        if not isfloat(self.com_center_w.lat):
-            error.append("Широта наземного пункта связи")
-        if not isfloat(self.com_center_w.lon):
-            error.append("Долгота наземного пункта связи")
-        if not self.parameters_w.time_line.text().isnumeric():
-            error.append("Дни сеанса связи")
-        if not isfloat(self.parameters_w.degree_line.text()):
-            error.append("Минимальный угол")
-        elif float(self.parameters_w.degree_line.text()) > 90:
-            error.append("Минимальный угол")
-        if len(error) == 0:
-            td = int(self.parameters_w.time_line.text())
-            degrees = float(self.parameters_w.degree_line.text())
-            t0 = self.time
-            t1 = self.time + timedelta(days=td)
-            stp = wgs84.latlon(self.com_center_w.lat, self.com_center_w.lon)
-            dif = self.satellite - stp
-            te, ev = self.satellite.find_events(stp, t0, t1, altitude_degrees=degrees)
-            start_t, finish_t, top = None, None, None
-            no_events = True
-            for ti, event in zip(te, ev):
-                if event == 0:
-                    start_t = ti.astimezone(timezone('Europe/Moscow'))
-                    start_t_str = start_t.strftime('%H:%M:%S')
-                if event == 1:
-                    peak_t = ti.astimezone(timezone('Europe/Moscow')).strftime('%Y %b %d %H:%M:%S')
-                    top = dif.at(ti)
-                if event == 2:
-                    finish_t = ti.astimezone(timezone('Europe/Moscow'))
-                    finish_t_str = finish_t.strftime('%H:%M:%S')
-                    alt, az, dist = top.altaz()
-                    dif_t_str = (finish_t - start_t)
-                    #        alt, az = alt.degrees, az.degrees
-                    text = (f'Время (UTC+3): {peak_t}\n'
-                           f'\tАзимут:\t{az}\n'
-                           f'\tМаксимальный угол места:\t{alt}\n'                           
-                           f'\tНачало:\t{start_t_str}\n'
-                           f'\tКонец:\t{finish_t_str}\n'
-                           f'\tДлит.:\t{dif_t_str}')
-                    # print(str)
-                    self.list_w.sessions_list.addItem(text)
-                    no_events = False
-            if no_events:
-                self.list_w.sessions_list.addItem("Не найдено сеансов связи")
+        if len(self.g_viewer.pic_base_list) == 0:
+            error.append("Нет спутника")
+        for i in range(len(self.com_center_w.base_list)):
+            if not isfloat(self.com_center_w.base_list[i][0]):
+                error.append("Широта наземного пункта связи")
+            if not isfloat(self.com_center_w.base_list[i][1]):
+                error.append("Долгота наземного пункта связи")
+            if not self.parameters_w.time_line.text().isnumeric():
+                error.append("Дни сеанса связи")
+            if not isfloat(self.parameters_w.degree_line.text()):
+                error.append("Минимальный угол")
+            elif float(self.parameters_w.degree_line.text()) > 90:
+                error.append("Минимальный угол")
+            if len(error) == 0:
+                td = int(self.parameters_w.time_line.text())
+                degrees = float(self.parameters_w.degree_line.text())
+                t0 = self.time
+                t1 = self.time + timedelta(days=td)
+                stp = wgs84.latlon(self.com_center_w.base_list[i][0], self.com_center_w.base_list[i][1])
+                dif = self.satellite - stp
+                te, ev = self.satellite.find_events(stp, t0, t1, altitude_degrees=degrees)
+                start_t, finish_t, top = None, None, None
+                no_events = True
+                for ti, event in zip(te, ev):
+                    if event == 0:
+                        start_t = ti.astimezone(timezone('Europe/Moscow'))
+                        start_t_str = start_t.strftime('%H:%M:%S')
+                    if event == 1:
+                        peak_t = ti.astimezone(timezone('Europe/Moscow')).strftime('%Y %b %d %H:%M:%S')
+                        top = dif.at(ti)
+                    if event == 2:
+                        finish_t = ti.astimezone(timezone('Europe/Moscow'))
+                        finish_t_str = finish_t.strftime('%H:%M:%S')
+                        alt, az, dist = top.altaz()
+                        dif_t_str = (finish_t - start_t)
+                        #        alt, az = alt.degrees, az.degrees
+                        text = (f'НПУ: {self.com_center_w.base_box.itemText(i)}\n'
+                                f'\tВремя (UTC+3): {peak_t}\n'
+                                f'\tАзимут:\t{az}\n'
+                                f'\tМаксимальный угол места:\t{alt}\n'                           
+                                f'\tНачало:\t{start_t_str}\n'
+                                f'\tКонец:\t{finish_t_str}\n'
+                                f'\tДлит.:\t{dif_t_str}')
+                        # print(str)
+                        self.list_w.sessions_list.addItem(text)
+                        no_events = False
+                if no_events:
+                    self.list_w.sessions_list.addItem("Не найдено сеансов связи")
 
         if len(error) > 0:
             dlg = QtWidgets.QDialog(self)
@@ -551,12 +566,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self.color_change()
             self.com_center_w.base_box.addItem(self.com_center_w.base_box.currentText())
             self.com_center_w.base_list.append([self.g_viewer.start_lat, self.g_viewer.start_lon])
-            self.com_center_w.base_box.setCurrentIndex(len(self.com_center_w.base_list) - 1)
+            self.com_center_w.change_index(self.g_viewer.index)
             lat = self.g_viewer.start_lat
             lon = self.g_viewer.start_lon
             pix_lat, pix_lon = self.g_viewer.geo_to_pix(lat, lon)
             self.com_center_w.show_coords(lat, lon)
-            self.g_viewer.change_base(self.com_center_w.base_box.currentIndex())
             self.g_viewer.move_base_to(pix_lat, pix_lon)
         # else:
         #     self.com_center_w.com_box.addItem(f"{self.com_center_w.com_box.count()+1}")
@@ -568,16 +582,26 @@ class MainWindow(QtWidgets.QMainWindow):
         #     self.g_viewer.move_base_to(pix_lat, pix_lon)
 
     def delete_button_clicked(self):
-        self.g_viewer.pic_base_list.pop(self.com_center_w.base_box.currentIndex())
-        self.com_center_w.base_box.removeItem(self.com_center_w.base_box.currentIndex())
+        if len(self.g_viewer.pic_base_list) > 1:
+            self.g_viewer.del_base()
+            self.com_center_w.base_list.pop(self.g_viewer.index)
+            self.com_center_w.remove_index(self.g_viewer.index)
+            self.change_base()
+            #I don't know how to allow the deletion of all НПУ so that the program does not crash. I succeeded once, but the change of НПУ after deletion did not work correctly.
 
     def change_base(self):
-        self.g_viewer.change_base(self.com_center_w.base_box.currentIndex())
-        lat = self.com_center_w.base_list[self.com_center_w.base_box.currentIndex()][0]
-        lon = self.com_center_w.base_list[self.com_center_w.base_box.currentIndex()][1]
-        pix_lat, pix_lon = self.g_viewer.geo_to_pix(lat, lon)
+        if len(self.g_viewer.pic_base_list) == 0:
+            lat = 0
+            lon = 0
+            self.com_center_w.change_color(0, 0, 0)
+        else:
+            self.g_viewer.change_index(self.com_center_w.base_box.currentIndex())
+            lat = self.com_center_w.base_list[self.g_viewer.index][0]
+            lon = self.com_center_w.base_list[self.g_viewer.index][1]
+            pix_lat, pix_lon = self.g_viewer.geo_to_pix(lat, lon)
+            self.g_viewer.move_base_to(pix_lat, pix_lon)
+            self.change_rgb_base()
         self.com_center_w.show_coords(lat, lon)
-        self.g_viewer.move_base_to(pix_lat, pix_lon)
 
     def show_color_w(self):
         self.color_w.show()
@@ -598,7 +622,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.list_w.sessions_list.clear()
 
     def base_coords_handler(self, lat: float = 0, lon: float = 0):
-        self.com_center_w.show_coords(lat, lon)
+        if self.g_viewer.pic_base_list != 0:
+            self.com_center_w.show_coords(lat, lon)
+        #print(f" index: {self.g_viewer.index}\n pic_base_list: {self.g_viewer.pic_base_list}\n color_base_list: {self.g_viewer.color_base_list}\n index_box: {self.com_center_w.base_box.currentIndex()}\n coords_list: {self.com_center_w.base_list}")
 
     def get_rgb_base(self):
         r, g, b, a = self.g_viewer.color_base_list[self.g_viewer.index].color().getRgb()
@@ -614,7 +640,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def base_change_handler(self, index: int):
         self.com_center_w.base_box.setCurrentIndex(index)
         self.change_base()
-        self.change_rgb_base()
 
     def base_show(self):
         if isfloat(self.com_center_w.lat_line.text()):
@@ -634,7 +659,7 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             lon = 0
 
-        self.com_center_w.base_list[self.com_center_w.base_box.currentIndex()] = [lat, lon]
+        self.com_center_w.base_list[self.g_viewer.index] = [lat, lon]
         pix_lat, pix_lon = self.g_viewer.geo_to_pix(lat, lon)
         # print(pix_lat, pix_lon)
         self.com_center_w.show_coords(lat, lon)
